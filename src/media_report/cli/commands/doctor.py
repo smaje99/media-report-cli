@@ -11,6 +11,7 @@ from media_report.core.settings import load_settings, redact_settings
 
 
 def doctor_command() -> None:
+    """Inspect bootstrap dependencies, packaged templates, and effective configuration."""
     settings = load_settings()
     table = Table(title="media-report doctor")
     table.add_column("Check")

@@ -97,6 +97,9 @@ Los primeros seis sprints cubren el núcleo del roadmap de 90 días. Los sprints
 
 #### WI-01-01 - Congelar contrato de CLI bootstrap
 
+- Estado: hecho
+- Cerrado en: `2026-05-07T00:00:00-05:00`
+
 - Objetivo: formalizar la superficie pública actual como contrato compatible.
 - Contexto técnico: hoy la CLI se arma en `media_report.cli.app` y `process` ya expone opciones futuras como `--only-transcribe` y `--only-report`, pero aún no ejecuta etapas reales.
 - Alcance funcional:
@@ -133,7 +136,7 @@ Scenario: Mostrar ayuda del comando raíz
   - registrar en `pipeline.log` solo cuando `process` genere artefactos;
   - no emitir stack traces para errores de uso esperados.
 - Pruebas unitarias/integración:
-  - integración CLI para `--help` y subcomandos;
+  - integración CLI para `--help` y subcommands;
   - snapshot textual liviano de help output si aporta estabilidad.
 - Criterio de aceptación:
   - la ayuda pública queda cubierta por pruebas y alineada con README.

@@ -48,6 +48,23 @@ media-report config show
 media-report templates list
 ```
 
+## Bootstrap Contract
+
+Version `0.1.0` treats the current bootstrap CLI surface as stable:
+
+- Root command: `media-report`
+- Stable bootstrap commands: `process`, `doctor`, `config init`, `config show`, `templates list`
+- Additive evolution only for new public options and commands
+
+`media-report process` keeps all currently visible flags public, with these current semantics:
+
+| Flag group | Flags | Bootstrap status |
+| --- | --- | --- |
+| Active now | `--recursive`, `--overwrite`, `--template` | Affect discovery, artifact reuse, and template planning today |
+| Active for planning | `--provider`, `--model`, `--output-format` | Affect planned workflow metadata and remote-provider warning today |
+| Planning selectors | `--only-transcribe`, `--only-report` | Constrain the planned stage set today; real stage execution arrives in later phases |
+| Stable placeholder | `--language` | Accepted now for future transcription behavior without extra bootstrap effects yet |
+
 Example usage:
 
 ```bash
@@ -64,6 +81,7 @@ media-report config init
 - Detects supported audio and video files
 - Creates per-file artifact directories next to the source media
 - Writes bootstrap `metadata.json` and `pipeline.log`
+- Prints the planned pipeline stages selected by the current bootstrap flags
 - Loads packaged prompt and PDF templates from installed package resources
 - Checks external tooling availability with `doctor`
 - Manages config at `~/.config/media-report/config.toml`

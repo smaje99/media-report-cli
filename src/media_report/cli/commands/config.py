@@ -23,6 +23,7 @@ def config_init(
         typer.Option("--path", help="Optional target config file path."),
     ] = None,
 ) -> None:
+    """Write a default config skeleton to the standard path or a custom target."""
     try:
         target = write_default_config(path=path, force=force)
     except FileExistsError as exc:
@@ -33,6 +34,7 @@ def config_init(
 
 @config_app.command("show")
 def config_show() -> None:
+    """Print the effective configuration with secrets redacted."""
     settings = load_settings()
     console.print(Pretty(settings.to_display_dict()))
     if not settings.config_path.exists():
@@ -44,4 +46,5 @@ def config_show() -> None:
 
 @config_app.command("example", hidden=True)
 def config_example() -> None:
+    """Print the default config data without writing to a file."""
     console.print(Pretty(default_config_data()))

@@ -17,32 +17,77 @@ from media_report.infrastructure.resources.templates import PackagePromptTemplat
 
 def process_command(
     path: Annotated[Path, typer.Argument(help="Media file or directory to process.")],
-    recursive: Annotated[bool, typer.Option("--recursive", help="Scan subdirectories.")] = False,
+    recursive: Annotated[
+        bool,
+        typer.Option("--recursive", help="Active in 0.1.0: scan subdirectories during discovery."),
+    ] = False,
     overwrite: Annotated[
-        bool, typer.Option("--overwrite", help="Allow reusing an existing artifact directory.")
+        bool,
+        typer.Option(
+            "--overwrite",
+            help="Active in 0.1.0: reuse an existing artifact directory instead of failing.",
+        ),
     ] = False,
     provider: Annotated[
-        str | None, typer.Option("--provider", help="Override the configured LLM provider.")
+        str | None,
+        typer.Option(
+            "--provider",
+            help=(
+                "Active in 0.1.0: override the planned LLM provider, metadata, "
+                "and remote warning."
+            ),
+        ),
     ] = None,
     model: Annotated[
-        str | None, typer.Option("--model", help="Override the configured model.")
+        str | None,
+        typer.Option(
+            "--model",
+            help="Active in 0.1.0: override the planned LLM model recorded in bootstrap metadata.",
+        ),
     ] = None,
     language: Annotated[
-        str | None, typer.Option("--language", help="Preferred transcription language.")
+        str | None,
+        typer.Option(
+            "--language",
+            help="Stable roadmap placeholder: accepted now for future transcription selection.",
+        ),
     ] = None,
     template: Annotated[
-        str, typer.Option("--template", help="Prompt template name to plan for.")
+        str,
+        typer.Option(
+            "--template",
+            help="Active in 0.1.0: choose the prompt template name stored in bootstrap metadata.",
+        ),
     ] = "generic",
     output_format: Annotated[
-        str | None, typer.Option("--output-format", help="Preferred output format.")
+        str | None,
+        typer.Option(
+            "--output-format",
+            help=(
+                "Active in 0.1.0 for planning: store the preferred output format "
+                "for later stages."
+            ),
+        ),
     ] = None,
     only_transcribe: Annotated[
-        bool, typer.Option("--only-transcribe", help="Stop after transcription in later phases.")
+        bool,
+        typer.Option(
+            "--only-transcribe",
+            help=(
+                "Planning flag in 0.1.0: limit planned stages to "
+                "extract_audio, normalize_audio, and transcribe."
+            ),
+        ),
     ] = False,
     only_report: Annotated[
-        bool, typer.Option("--only-report", help="Skip upstream stages when resume exists later.")
+        bool,
+        typer.Option(
+            "--only-report",
+            help="Planning flag in 0.1.0: limit planned stages to report and pdf for later resume.",
+        ),
     ] = False,
 ) -> None:
+    """Prepare bootstrap artifacts, persist planning metadata, and print the planned stages."""
     settings = load_settings()
     scanner = FileSystemMediaScanner()
     templates = PackagePromptTemplateRepository()
