@@ -143,6 +143,9 @@ Scenario: Mostrar ayuda del comando raíz
 
 #### WI-01-02 - Evolucionar `metadata.json` para reanudación futura
 
+- Estado: hecho
+- Cerrado en: `2026-05-08T00:11:06-05:00`
+
 - Objetivo: mover el bootstrap actual hacia un esquema que soporte estados por etapa y errores resumidos.
 - Contexto técnico: `ArtifactPlanner.bootstrap_metadata()` ya escribe `schema_version`, `workflow` y `stages`, pero todas las etapas quedan solo como `planned`.
 - Alcance funcional:

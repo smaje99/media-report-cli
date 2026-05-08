@@ -9,6 +9,7 @@ from media_report.application.process_media.models import (
 )
 from media_report.core.errors import InputPathError
 from media_report.domain.artifacts.entities import PipelineStage
+from media_report.domain.artifacts.ports import PipelineMetadataRepository
 from media_report.domain.artifacts.service import ArtifactPlanner
 from media_report.domain.media.entities import MediaSource
 from media_report.domain.reporting.ports import PromptTemplateRepository
@@ -16,13 +17,19 @@ from media_report.infrastructure.filesystem.scanner import FileSystemMediaScanne
 
 
 class ProcessMediaService:
+    """
+    A service for processing media files and generating report artifacts.
+    """
+
     def __init__(
         self,
         scanner: FileSystemMediaScanner,
         templates: PromptTemplateRepository,
+        metadata_repository: PipelineMetadataRepository,
     ) -> None:
         self._scanner = scanner
         self._templates = templates
+        self._metadata_repository = metadata_repository
         self._artifact_planner = ArtifactPlanner()
 
     def process(self, request: ProcessRequest) -> ProcessPlan:
@@ -31,6 +38,7 @@ class ProcessMediaService:
             raise InputPathError("No supported audio or video files were found.")
 
         self._templates.get_template(request.template_name)
+        selected_stages = self._select_stages(request)
 
         items: list[ProcessPlanItem] = []
         for source in sources:
@@ -42,16 +50,21 @@ class ProcessMediaService:
                 llm_provider=request.llm_provider,
                 llm_model=request.llm_model,
                 output_format=request.output_format,
+                language=request.language,
+                selected_stages=selected_stages,
             )
-            self._artifact_planner.write_metadata(metadata)
-            self._artifact_planner.initialize_log(artifacts.root_dir)
+            self._metadata_repository.write(metadata)
+            self._artifact_planner.initialize_log(
+                artifacts.root_dir,
+                metadata_schema_version=metadata.schema_version,
+            )
 
             items.append(
                 ProcessPlanItem(
                     source=source,
                     artifacts=artifacts,
                     template_name=request.template_name,
-                    stages=self._select_stages(request),
+                    stages=selected_stages,
                 )
             )
 

@@ -1,0 +1,19 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from media_report.domain.artifacts.entities import PipelineMetadata
+
+
+class JsonPipelineMetadataRepository:
+    """Repository for reading and writing pipeline metadata as JSON files."""
+
+    def read(self, path: Path) -> PipelineMetadata:
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        return PipelineMetadata.from_payload(payload)
+
+    def write(self, metadata: PipelineMetadata) -> None:
+        target = Path(metadata.artifacts.metadata_json)
+        target.write_text(json.dumps(metadata.to_payload(), indent=2), encoding="utf-8")

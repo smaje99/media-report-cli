@@ -11,6 +11,9 @@ from media_report.application.process_media.service import ProcessMediaService
 from media_report.core.console import console
 from media_report.core.errors import ArtifactConflictError, MediaReportError
 from media_report.core.settings import load_settings
+from media_report.infrastructure.filesystem.metadata_repository import (
+    JsonPipelineMetadataRepository,
+)
 from media_report.infrastructure.filesystem.scanner import FileSystemMediaScanner
 from media_report.infrastructure.resources.templates import PackagePromptTemplateRepository
 
@@ -91,7 +94,12 @@ def process_command(
     settings = load_settings()
     scanner = FileSystemMediaScanner()
     templates = PackagePromptTemplateRepository()
-    service = ProcessMediaService(scanner=scanner, templates=templates)
+    metadata_repository = JsonPipelineMetadataRepository()
+    service = ProcessMediaService(
+        scanner=scanner,
+        templates=templates,
+        metadata_repository=metadata_repository,
+    )
 
     try:
         plan = service.process(

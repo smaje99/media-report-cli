@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -133,6 +134,22 @@ def test_process_creates_artifact_directory_and_metadata(tmp_path: Path, monkeyp
     assert artifact_dir.exists()
     assert metadata_path.exists()
     assert log_path.exists()
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["schema_version"] == 2
+    assert metadata["workflow"]["language"] is None
+    assert metadata["workflow"]["selected_stages"] == [
+        "extract_audio",
+        "normalize_audio",
+        "transcribe",
+        "report",
+        "pdf",
+    ]
+    assert metadata["stages"]["transcribe"]["status"] == "planned"
+    assert metadata["stages"]["transcribe"]["started_at"] is None
+    assert metadata["stages"]["transcribe"]["finished_at"] is None
+    assert metadata["stages"]["transcribe"]["updated_at"] == metadata["generated_at"]
+    assert metadata["stages"]["transcribe"]["error"] is None
+    assert "metadata initialized (schema v2)" in log_path.read_text(encoding="utf-8")
 
 
 def test_process_only_transcribe_limits_planned_stages(tmp_path: Path, monkeypatch) -> None:
@@ -141,6 +158,7 @@ def test_process_only_transcribe_limits_planned_stages(tmp_path: Path, monkeypat
     media_file.write_text("fake media", encoding="utf-8")
 
     result = runner.invoke(app, ["process", str(media_file), "--only-transcribe"])
+    metadata_path = tmp_path / "meeting_media_report" / "metadata.json"
 
     assert result.exit_code == 0
     assert "EXTRACT_AUDIO" in result.stdout
@@ -148,6 +166,16 @@ def test_process_only_transcribe_limits_planned_stages(tmp_path: Path, monkeypat
     assert "TRANSCRIBE" in result.stdout
     assert "REPORT" not in result.stdout
     assert " PDF " not in result.stdout
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["workflow"]["selected_stages"] == [
+        "extract_audio",
+        "normalize_audio",
+        "transcribe",
+    ]
+    assert metadata["stages"]["extract_audio"]["status"] == "planned"
+    assert metadata["stages"]["report"]["status"] == "skipped"
+    assert metadata["stages"]["report"]["finished_at"] == metadata["generated_at"]
+    assert metadata["stages"]["pdf"]["status"] == "skipped"
 
 
 def test_process_only_report_limits_planned_stages(tmp_path: Path, monkeypatch) -> None:
@@ -156,6 +184,7 @@ def test_process_only_report_limits_planned_stages(tmp_path: Path, monkeypatch) 
     media_file.write_text("fake media", encoding="utf-8")
 
     result = runner.invoke(app, ["process", str(media_file), "--only-report"])
+    metadata_path = tmp_path / "meeting_media_report" / "metadata.json"
 
     assert result.exit_code == 0
     assert "REPORT" in result.stdout
@@ -163,6 +192,12 @@ def test_process_only_report_limits_planned_stages(tmp_path: Path, monkeypatch) 
     assert "EXTRACT_AUDIO" not in result.stdout
     assert "NORMALIZE_AUDIO" not in result.stdout
     assert "TRANSCRIBE" not in result.stdout
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["workflow"]["selected_stages"] == ["report", "pdf"]
+    assert metadata["stages"]["report"]["status"] == "planned"
+    assert metadata["stages"]["extract_audio"]["status"] == "skipped"
+    assert metadata["stages"]["normalize_audio"]["status"] == "skipped"
+    assert metadata["stages"]["transcribe"]["status"] == "skipped"
 
 
 def test_process_fails_when_artifacts_exist_without_overwrite(tmp_path: Path, monkeypatch) -> None:
