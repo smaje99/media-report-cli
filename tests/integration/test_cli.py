@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from media_report.cli.app import app
@@ -12,6 +13,12 @@ def combined_output(result: object) -> str:
     stdout = getattr(result, "stdout", "")
     stderr = getattr(result, "stderr", "")
     return f"{stdout}{stderr}"
+
+
+@pytest.fixture
+def single_media_path(copy_fixture_tree) -> Path:
+    fixture_dir = copy_fixture_tree("media/single")
+    return fixture_dir / "meeting_audio.wav"
 
 
 def test_root_help_exposes_bootstrap_contract() -> None:
@@ -119,14 +126,14 @@ def test_doctor_reports_dependencies(tmp_path: Path, monkeypatch) -> None:
     assert "ffmpeg" in result.stdout
 
 
-def test_process_creates_artifact_directory_and_metadata(tmp_path: Path, monkeypatch) -> None:
+def test_process_creates_artifact_directory_and_metadata(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    media_file = tmp_path / "meeting.mp4"
-    media_file.write_text("fake media", encoding="utf-8")
 
-    result = runner.invoke(app, ["process", str(media_file)])
+    result = runner.invoke(app, ["process", str(single_media_path)])
 
-    artifact_dir = tmp_path / "meeting_media_report"
+    artifact_dir = single_media_path.parent / "meeting_audio_media_report"
     metadata_path = artifact_dir / "metadata.json"
     log_path = artifact_dir / "pipeline.log"
 
@@ -152,13 +159,13 @@ def test_process_creates_artifact_directory_and_metadata(tmp_path: Path, monkeyp
     assert "metadata initialized (schema v2)" in log_path.read_text(encoding="utf-8")
 
 
-def test_process_only_transcribe_limits_planned_stages(tmp_path: Path, monkeypatch) -> None:
+def test_process_only_transcribe_limits_planned_stages(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    media_file = tmp_path / "meeting.mp4"
-    media_file.write_text("fake media", encoding="utf-8")
 
-    result = runner.invoke(app, ["process", str(media_file), "--only-transcribe"])
-    metadata_path = tmp_path / "meeting_media_report" / "metadata.json"
+    result = runner.invoke(app, ["process", str(single_media_path), "--only-transcribe"])
+    metadata_path = single_media_path.parent / "meeting_audio_media_report" / "metadata.json"
 
     assert result.exit_code == 0
     assert "EXTRACT_AUDIO" in result.stdout
@@ -178,13 +185,13 @@ def test_process_only_transcribe_limits_planned_stages(tmp_path: Path, monkeypat
     assert metadata["stages"]["pdf"]["status"] == "skipped"
 
 
-def test_process_only_report_limits_planned_stages(tmp_path: Path, monkeypatch) -> None:
+def test_process_only_report_limits_planned_stages(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    media_file = tmp_path / "meeting.mp4"
-    media_file.write_text("fake media", encoding="utf-8")
 
-    result = runner.invoke(app, ["process", str(media_file), "--only-report"])
-    metadata_path = tmp_path / "meeting_media_report" / "metadata.json"
+    result = runner.invoke(app, ["process", str(single_media_path), "--only-report"])
+    metadata_path = single_media_path.parent / "meeting_audio_media_report" / "metadata.json"
 
     assert result.exit_code == 0
     assert "REPORT" in result.stdout
@@ -200,17 +207,45 @@ def test_process_only_report_limits_planned_stages(tmp_path: Path, monkeypatch) 
     assert metadata["stages"]["transcribe"]["status"] == "skipped"
 
 
-def test_process_fails_when_artifacts_exist_without_overwrite(tmp_path: Path, monkeypatch) -> None:
+def test_process_fails_when_artifacts_exist_without_overwrite(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-    media_file = tmp_path / "meeting.mp4"
-    media_file.write_text("fake media", encoding="utf-8")
-    artifact_dir = tmp_path / "meeting_media_report"
+    artifact_dir = single_media_path.parent / "meeting_audio_media_report"
     artifact_dir.mkdir()
 
-    result = runner.invoke(app, ["process", str(media_file)])
+    result = runner.invoke(app, ["process", str(single_media_path)])
 
     assert result.exit_code == 2
     assert "--overwrite" in result.stdout
+
+
+def test_process_recursive_directory_plans_supported_media_only(
+    tmp_path: Path, monkeypatch, copy_fixture_tree
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    input_dir = copy_fixture_tree("media/recursive")
+
+    result = runner.invoke(app, ["process", str(input_dir), "--recursive"])
+
+    assert result.exit_code == 0
+    assert "Prepared 2 artifact directories." in result.stdout
+    root_artifact_dir = input_dir / "root_audio_media_report"
+    nested_artifact_dir = input_dir / "nested" / "interview_video_media_report"
+
+    assert root_artifact_dir.exists()
+    assert nested_artifact_dir.exists()
+    assert not (input_dir / "notes_media_report").exists()
+
+    root_metadata = json.loads((root_artifact_dir / "metadata.json").read_text(encoding="utf-8"))
+    nested_metadata = json.loads(
+        (nested_artifact_dir / "metadata.json").read_text(encoding="utf-8")
+    )
+
+    assert root_metadata["source"]["path"].endswith("root_audio.wav")
+    assert root_metadata["source"]["kind"] == "audio"
+    assert nested_metadata["source"]["path"].endswith("interview_video.mp4")
+    assert nested_metadata["source"]["kind"] == "video"
 
 
 def test_process_invalid_path_exits_with_code_one(tmp_path: Path, monkeypatch) -> None:
