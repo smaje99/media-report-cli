@@ -74,6 +74,9 @@ Los primeros seis sprints cubren el núcleo del roadmap de 90 días. Los sprints
 
 ### Sprint 01 - Baseline, CLI estable y esquema de metadata
 
+- Estado: hecho
+- Cerrado en: `2026-05-14T20:04:51-05:00`
+
 - Objetivo del sprint: fijar el contrato público de `0.1.0`, cerrar vacíos de metadata y dejar una base segura para resumir etapas posteriores.
 - Alcance:
   - documentar y validar el contrato actual de CLI;
@@ -187,6 +190,9 @@ Scenario: Bootstrap de metadata para archivo nuevo
   - `metadata.json` soporta el ciclo completo del pipeline sin rediseño posterior.
 
 #### WI-01-03 - Endurecer fixtures y casos de baseline
+
+- Estado: hecho
+- Cerrado en: `2026-05-14T20:04:51-05:00`
 
 - Objetivo: disponer de fixtures mínimas y reproducibles para todo el backlog.
 - Contexto técnico: hoy las pruebas fabrican archivos fake locales; falta una convención para casos de carpeta recursiva y colisión de artefactos.
