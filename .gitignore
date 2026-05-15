@@ -13,3 +13,4 @@ dist/
 .idea/
 .vscode/
 .codex
+tests/fixtures/media/**

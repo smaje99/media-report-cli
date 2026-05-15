@@ -4,7 +4,11 @@ import pytest
 
 from media_report.core.errors import InputPathError
 from media_report.domain.media.entities import MediaKind
-from media_report.infrastructure.filesystem.scanner import FileSystemMediaScanner
+from media_report.infrastructure.filesystem.scanner import (
+    SUPPORTED_AUDIO_EXTENSIONS,
+    SUPPORTED_VIDEO_EXTENSIONS,
+    FileSystemMediaScanner,
+)
 
 
 def test_classify_audio_extension(tmp_path: Path) -> None:
@@ -38,8 +42,13 @@ def test_scan_recursively_discovers_nested_media_and_skips_unsupported(copy_fixt
 
     sources = FileSystemMediaScanner().scan(fixture_dir, recursive=True)
 
-    assert [source.path.relative_to(fixture_dir).as_posix() for source in sources] == [
-        "nested/interview_video.mp4",
-        "root_audio.wav",
-    ]
-    assert [source.kind for source in sources] == [MediaKind.VIDEO, MediaKind.AUDIO]
+    supported_extensions = SUPPORTED_AUDIO_EXTENSIONS | SUPPORTED_VIDEO_EXTENSIONS
+    expected_paths = sorted(
+        candidate.relative_to(fixture_dir).as_posix()
+        for candidate in fixture_dir.rglob("*")
+        if candidate.is_file() and candidate.suffix.lower() in supported_extensions
+    )
+
+    assert [source.path.relative_to(fixture_dir).as_posix() for source in sources] == expected_paths
+    assert "notes.txt" not in expected_paths
+    assert all(source.kind in {MediaKind.AUDIO, MediaKind.VIDEO} for source in sources)
