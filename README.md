@@ -60,17 +60,20 @@ Version `0.1.0` treats the current bootstrap CLI surface as stable:
 
 | Flag group | Flags | Bootstrap status |
 | --- | --- | --- |
-| Active now | `--recursive`, `--overwrite`, `--template` | Affect discovery, artifact reuse, and template planning today |
+| Active now | `--recursive`, `--resume`, `--template` | Affect discovery, artifact reuse, and template planning today |
+| Deprecated compatibility | `--overwrite` | Deprecated alias for `--resume` during Sprint 2; destructive overwrite is intentionally not exposed yet |
 | Active for planning | `--provider`, `--model`, `--output-format` | Affect planned workflow metadata and remote-provider warning today |
-| Planning selectors | `--only-transcribe`, `--only-report` | Constrain the planned stage set today; real stage execution arrives in later phases |
-| Stable placeholder | `--language` | Accepted now for future transcription behavior without extra bootstrap effects yet |
+| Planning selectors | `--only-transcribe`, `--only-report` | Constrain the planned stage set today; `--only-report` requires reusable transcription artifacts and `--resume` |
+| Metadata planning | `--language` | Recorded in pipeline metadata for future transcription execution |
 
 Example usage:
 
 ```bash
 media-report process ./meeting.mp4
+media-report process ./meeting.mp4 --resume
 media-report process ./recordings --recursive --template meeting
 media-report process ./lecture.mp3 --provider openai-compatible --model gpt-4.1-mini --language es
+media-report process ./lecture.mp3 --resume --only-report
 media-report doctor
 media-report config init
 ```
@@ -81,7 +84,9 @@ media-report config init
 - Detects supported audio and video files
 - Creates per-file artifact directories next to the source media
 - Writes bootstrap `metadata.json` and `pipeline.log`
-- Prints the planned pipeline stages selected by the current bootstrap flags
+- Reuses valid sibling artifact directories when invoked with `--resume`
+- Validates existing metadata strictly before planning a resumed run
+- Prints per-stage planning decisions (`planned`, `reused`, `skipped`)
 - Loads packaged prompt and PDF templates from installed package resources
 - Checks external tooling availability with `doctor`
 - Manages config at `~/.config/media-report/config.toml`

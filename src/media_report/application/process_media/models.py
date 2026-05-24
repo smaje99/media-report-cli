@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from media_report.domain.artifacts.entities import ArtifactPlan, PipelineStage
+from media_report.domain.artifacts.entities import ArtifactPlan, StageDecision
 from media_report.domain.media.entities import MediaSource
 
 
@@ -12,6 +12,7 @@ class ProcessRequest:
     input_path: Path
     recursive: bool = False
     overwrite: bool = False
+    resume: bool = False
     template_name: str = "generic"
     only_transcribe: bool = False
     only_report: bool = False
@@ -26,7 +27,7 @@ class ProcessPlanItem:
     source: MediaSource
     artifacts: ArtifactPlan
     template_name: str
-    stages: tuple[PipelineStage, ...]
+    stage_decisions: tuple[StageDecision, ...]
 
 
 @dataclass(frozen=True)

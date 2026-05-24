@@ -30,7 +30,8 @@ def _single_match(directory: Path, pattern: str) -> Path:
     matches = sorted(directory.glob(pattern))
     if len(matches) != 1:
         raise FileNotFoundError(
-            f"Expected exactly one fixture matching '{pattern}' in {directory}, found {len(matches)}."
+            f"Expected exactly one fixture matching '{pattern}' in {directory}, "
+            f"found {len(matches)}."
         )
     return matches[0]
 

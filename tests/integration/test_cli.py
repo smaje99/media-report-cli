@@ -1,9 +1,16 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from media_report.cli.app import app
+from media_report.domain.artifacts.entities import PipelineStage, PipelineStageStatus
+from media_report.domain.artifacts.service import ArtifactPlanner
+from media_report.domain.media.entities import MediaSource
+from media_report.infrastructure.filesystem.metadata_repository import (
+    JsonPipelineMetadataRepository,
+)
 from media_report.infrastructure.filesystem.scanner import FileSystemMediaScanner
 
 runner = CliRunner()
@@ -15,6 +22,51 @@ def combined_output(result: object) -> str:
     return f"{stdout}{stderr}"
 
 
+def write_resume_ready_metadata(media_path: Path) -> Path:
+    planner = ArtifactPlanner()
+    artifact_plan = planner.prepare_new(media_path)
+    source = FileSystemMediaScanner().classify(media_path)
+    metadata = planner.bootstrap_metadata(
+        source=MediaSource(path=media_path, kind=source.kind),
+        artifact_plan=artifact_plan,
+        template_name="generic",
+        llm_provider="ollama",
+        llm_model="llama3.1",
+        output_format="pdf",
+        language=None,
+        selected_stages=tuple(PipelineStage),
+    )
+    completed_stage = replace(
+        metadata.stages[PipelineStage.TRANSCRIBE],
+        status=PipelineStageStatus.COMPLETED,
+        finished_at=metadata.generated_at,
+    )
+    metadata = replace(
+        metadata,
+        stages={
+            **metadata.stages,
+            PipelineStage.EXTRACT_AUDIO: replace(
+                metadata.stages[PipelineStage.EXTRACT_AUDIO],
+                status=PipelineStageStatus.COMPLETED,
+                finished_at=metadata.generated_at,
+            ),
+            PipelineStage.NORMALIZE_AUDIO: replace(
+                metadata.stages[PipelineStage.NORMALIZE_AUDIO],
+                status=PipelineStageStatus.COMPLETED,
+                finished_at=metadata.generated_at,
+            ),
+            PipelineStage.TRANSCRIBE: completed_stage,
+        },
+    )
+    JsonPipelineMetadataRepository().write(metadata)
+    planner.initialize_log(artifact_plan.root_dir, metadata_schema_version=metadata.schema_version)
+    artifact_plan.audio_extracted.write_text("audio", encoding="utf-8")
+    artifact_plan.audio_normalized.write_text("audio", encoding="utf-8")
+    artifact_plan.transcript_raw.write_text("transcript", encoding="utf-8")
+    artifact_plan.transcript_segments.write_text("[]", encoding="utf-8")
+    return artifact_plan.root_dir
+
+
 def test_root_help_exposes_bootstrap_contract() -> None:
     result = runner.invoke(app, ["--help"])
 
@@ -24,7 +76,7 @@ def test_root_help_exposes_bootstrap_contract() -> None:
     assert "doctor" in result.stdout
     assert "config" in result.stdout
     assert "templates" in result.stdout
-    assert "Prepare bootstrap artifacts and a stage plan for local media." in result.stdout
+    assert "Prepare or resume artifact planning for local media." in result.stdout
     assert "Inspect the local bootstrap environment and packaged resources." in result.stdout
 
 
@@ -41,9 +93,10 @@ def test_process_help_documents_bootstrap_flag_contract() -> None:
     result = runner.invoke(app, ["process", "--help"])
 
     assert result.exit_code == 0
-    assert "Prepare bootstrap artifacts" in result.stdout
+    assert "Prepare or resume artifact planning" in result.stdout
     for flag in (
         "--recursive",
+        "--resume",
         "--overwrite",
         "--provider",
         "--model",
@@ -54,9 +107,8 @@ def test_process_help_documents_bootstrap_flag_contract() -> None:
         "--only-report",
     ):
         assert flag in result.stdout
-    assert "Active in 0.1.0" in result.stdout
-    assert "Planning flag in 0.1.0" in result.stdout
-    assert "Stable roadmap placeholder" in result.stdout
+    assert "Deprecated alias for --resume" in result.stdout
+    assert "--only-report" in result.stdout
 
 
 def test_config_help_exposes_public_commands_only() -> None:
@@ -151,6 +203,9 @@ def test_process_creates_artifact_directory_and_metadata(
     assert metadata["stages"]["transcribe"]["updated_at"] == metadata["generated_at"]
     assert metadata["stages"]["transcribe"]["error"] is None
     assert "metadata initialized (schema v2)" in log_path.read_text(encoding="utf-8")
+    assert "extract_audio: planned" in result.stdout
+    assert "report: planned" in result.stdout
+    assert "pdf: planned" in result.stdout
 
 
 def test_process_only_transcribe_limits_planned_stages(
@@ -164,11 +219,11 @@ def test_process_only_transcribe_limits_planned_stages(
     )
 
     assert result.exit_code == 0
-    assert "EXTRACT_AUDIO" in result.stdout
-    assert "NORMALIZE_AUDIO" in result.stdout
-    assert "TRANSCRIBE" in result.stdout
-    assert "REPORT" not in result.stdout
-    assert " PDF " not in result.stdout
+    assert "extract_audio: planned" in result.stdout
+    assert "normalize_audio: planned" in result.stdout
+    assert "transcribe: planned" in result.stdout
+    assert "report: skipped" in result.stdout
+    assert "pdf: skipped" in result.stdout
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     assert metadata["workflow"]["selected_stages"] == [
         "extract_audio",
@@ -181,31 +236,19 @@ def test_process_only_transcribe_limits_planned_stages(
     assert metadata["stages"]["pdf"]["status"] == "skipped"
 
 
-def test_process_only_report_limits_planned_stages(
+def test_process_only_report_requires_existing_transcription(
     tmp_path: Path, monkeypatch, single_media_path: Path
 ) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
 
     result = runner.invoke(app, ["process", str(single_media_path), "--only-report"])
-    metadata_path = (
-        single_media_path.parent / f"{single_media_path.stem}_media_report" / "metadata.json"
-    )
 
-    assert result.exit_code == 0
-    assert "REPORT" in result.stdout
-    assert "PDF" in result.stdout
-    assert "EXTRACT_AUDIO" not in result.stdout
-    assert "NORMALIZE_AUDIO" not in result.stdout
-    assert "TRANSCRIBE" not in result.stdout
-    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-    assert metadata["workflow"]["selected_stages"] == ["report", "pdf"]
-    assert metadata["stages"]["report"]["status"] == "planned"
-    assert metadata["stages"]["extract_audio"]["status"] == "skipped"
-    assert metadata["stages"]["normalize_audio"]["status"] == "skipped"
-    assert metadata["stages"]["transcribe"]["status"] == "skipped"
+    assert result.exit_code == 1
+    assert "Cannot start a fresh pipeline at 'report'" in result.stdout
+    assert "--resume" in result.stdout
 
 
-def test_process_fails_when_artifacts_exist_without_overwrite(
+def test_process_fails_when_artifacts_exist_without_resume(
     tmp_path: Path, monkeypatch, single_media_path: Path
 ) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
@@ -215,7 +258,7 @@ def test_process_fails_when_artifacts_exist_without_overwrite(
     result = runner.invoke(app, ["process", str(single_media_path)])
 
     assert result.exit_code == 2
-    assert "--overwrite" in result.stdout
+    assert "--resume" in result.stdout
 
 
 def test_process_recursive_directory_plans_supported_media_only(
@@ -246,6 +289,65 @@ def test_process_invalid_path_exits_with_code_one(tmp_path: Path, monkeypatch) -
 
     assert result.exit_code == 1
     assert "Input path does not exist" in result.stdout
+
+
+def test_process_resume_reuses_completed_transcription_artifacts(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    artifact_root = write_resume_ready_metadata(single_media_path)
+
+    result = runner.invoke(app, ["process", str(single_media_path), "--resume", "--only-report"])
+
+    assert result.exit_code == 0
+    assert "extract_audio: reused" in result.stdout
+    assert "normalize_audio: reused" in result.stdout
+    assert "transcribe: reused" in result.stdout
+    assert "report: planned" in result.stdout
+    assert "pdf: planned" in result.stdout
+    metadata = json.loads((artifact_root / "metadata.json").read_text(encoding="utf-8"))
+    assert metadata["workflow"]["selected_stages"] == ["report", "pdf"]
+
+
+def test_process_overwrite_warns_and_behaves_like_resume(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    write_resume_ready_metadata(single_media_path)
+
+    result = runner.invoke(app, ["process", str(single_media_path), "--overwrite", "--only-report"])
+
+    assert result.exit_code == 0
+    assert "--overwrite is deprecated" in result.stdout
+    assert "report: planned" in result.stdout
+
+
+def test_process_resume_fails_for_corrupt_metadata(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    artifact_dir = single_media_path.parent / f"{single_media_path.stem}_media_report"
+    artifact_dir.mkdir()
+    (artifact_dir / "metadata.json").write_text("{not-json", encoding="utf-8")
+
+    result = runner.invoke(app, ["process", str(single_media_path), "--resume"])
+
+    assert result.exit_code == 1
+    assert "Invalid artifact metadata" in result.stdout
+
+
+def test_process_resume_fails_for_incomplete_completed_stage(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    artifact_root = write_resume_ready_metadata(single_media_path)
+    (artifact_root / "transcript_segments.json").unlink()
+
+    result = runner.invoke(app, ["process", str(single_media_path), "--resume", "--only-report"])
+
+    assert result.exit_code == 1
+    assert "required artifacts are" in result.stdout
+    assert "missing: transcript_segments.json" in result.stdout
 
 
 def test_process_directory_without_supported_media_exits_with_code_one(

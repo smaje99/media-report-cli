@@ -22,13 +22,23 @@ def process_command(
     path: Annotated[Path, typer.Argument(help="Media file or directory to process.")],
     recursive: Annotated[
         bool,
-        typer.Option("--recursive", help="Active in 0.1.0: scan subdirectories during discovery."),
+        typer.Option("--recursive", help="Scan subdirectories during media discovery."),
+    ] = False,
+    resume: Annotated[
+        bool,
+        typer.Option(
+            "--resume",
+            help="Reuse a valid sibling artifact directory and plan only the stages still needed.",
+        ),
     ] = False,
     overwrite: Annotated[
         bool,
         typer.Option(
             "--overwrite",
-            help="Active in 0.1.0: reuse an existing artifact directory instead of failing.",
+            help=(
+                "Deprecated alias for --resume in Sprint 2. "
+                "A destructive overwrite is not exposed yet."
+            ),
         ),
     ] = False,
     provider: Annotated[
@@ -36,61 +46,51 @@ def process_command(
         typer.Option(
             "--provider",
             help=(
-                "Active in 0.1.0: override the planned LLM provider, metadata, "
-                "and remote warning."
+                "Override the planned LLM provider recorded in metadata "
+                "and used for remote warnings."
             ),
         ),
     ] = None,
     model: Annotated[
         str | None,
         typer.Option(
-            "--model",
-            help="Active in 0.1.0: override the planned LLM model recorded in bootstrap metadata.",
+            "--model", help="Override the planned LLM model recorded in pipeline metadata."
         ),
     ] = None,
     language: Annotated[
         str | None,
         typer.Option(
-            "--language",
-            help="Stable roadmap placeholder: accepted now for future transcription selection.",
+            "--language", help="Record the requested transcription language in pipeline metadata."
         ),
     ] = None,
     template: Annotated[
         str,
         typer.Option(
-            "--template",
-            help="Active in 0.1.0: choose the prompt template name stored in bootstrap metadata.",
+            "--template", help="Choose the prompt template name stored in pipeline metadata."
         ),
     ] = "generic",
     output_format: Annotated[
         str | None,
         typer.Option(
-            "--output-format",
-            help=(
-                "Active in 0.1.0 for planning: store the preferred output format "
-                "for later stages."
-            ),
+            "--output-format", help="Store the preferred output format for later pipeline stages."
         ),
     ] = None,
     only_transcribe: Annotated[
         bool,
         typer.Option(
             "--only-transcribe",
-            help=(
-                "Planning flag in 0.1.0: limit planned stages to "
-                "extract_audio, normalize_audio, and transcribe."
-            ),
+            help="Limit planning to extract_audio, normalize_audio, and transcribe.",
         ),
     ] = False,
     only_report: Annotated[
         bool,
         typer.Option(
             "--only-report",
-            help="Planning flag in 0.1.0: limit planned stages to report and pdf for later resume.",
+            help="Limit planning to report and pdf. Requires reusable transcription artifacts.",
         ),
     ] = False,
 ) -> None:
-    """Prepare bootstrap artifacts, persist planning metadata, and print the planned stages."""
+    """Prepare or resume artifact planning, persist metadata, and print per-stage decisions."""
     settings = load_settings()
     scanner = FileSystemMediaScanner()
     templates = PackagePromptTemplateRepository()
@@ -107,6 +107,7 @@ def process_command(
                 input_path=path,
                 recursive=recursive,
                 overwrite=overwrite,
+                resume=resume,
                 template_name=template,
                 only_transcribe=only_transcribe,
                 only_report=only_report,
@@ -123,6 +124,12 @@ def process_command(
         console.print(f"[red]Error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
 
+    if overwrite:
+        console.print(
+            "[yellow]Warning:[/yellow] --overwrite is deprecated in Sprint 2 and currently behaves "
+            "the same as --resume. A destructive overwrite mode will be introduced separately."
+        )
+
     if plan.remote_provider_selected:
         console.print(
             "[yellow]Warning:[/yellow] remote provider selected. "
@@ -134,7 +141,7 @@ def process_command(
     table.add_column("Kind")
     table.add_column("Artifacts")
     table.add_column("Template")
-    table.add_column("Stages")
+    table.add_column("Stage Decisions")
 
     for item in plan.items:
         table.add_row(
@@ -142,10 +149,19 @@ def process_command(
             item.source.kind.value,
             str(item.artifacts.root_dir),
             item.template_name,
-            ", ".join(stage.name for stage in item.stages),
+            "\n".join(
+                f"{decision.stage.value}: {decision.decision.value} ({decision.reason})"
+                for decision in item.stage_decisions
+            ),
         )
 
     console.print(table)
+    for item in plan.items:
+        for decision in item.stage_decisions:
+            console.print(
+                f"{item.source.path.name} :: {decision.stage.value}: "
+                f"{decision.decision.value} - {decision.reason}"
+            )
     console.print(
         f"Prepared {len(plan.items)} artifact director{'y' if len(plan.items) == 1 else 'ies'}."
     )

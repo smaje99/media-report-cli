@@ -22,6 +22,20 @@ class PipelineStageStatus(StrEnum):
     SKIPPED = "skipped"
 
 
+class PipelineStageDecision(StrEnum):
+    PLANNED = "planned"
+    REUSED = "reused"
+    SKIPPED = "skipped"
+    BLOCKED = "blocked"
+
+
+@dataclass(frozen=True)
+class StageDecision:
+    stage: PipelineStage
+    decision: PipelineStageDecision
+    reason: str
+
+
 @dataclass(frozen=True)
 class ArtifactPlan:
     root_dir: Path
