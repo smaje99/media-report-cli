@@ -234,6 +234,9 @@ Scenario: Procesar carpeta con exploración recursiva
 
 ### Sprint 02 - Reanudación y modelo de artefactos
 
+- Estado: hecho
+- Cerrado en: `2026-05-24T01:59:19-05:00`
+
 - Objetivo del sprint: dejar listo el modelo de artefactos para ejecución real por etapas sin perder trazabilidad ni compatibilidad.
 - Alcance:
   - lectura/escritura consistente de metadata;
@@ -255,6 +258,9 @@ Scenario: Procesar carpeta con exploración recursiva
   - la aplicación puede decidir qué etapas ejecutar o reutilizar en función de metadata existente.
 
 #### WI-02-01 - Introducir modelo de estado de pipeline en dominio
+
+- Estado: hecho
+- Cerrado en: `2026-05-24T01:59:19-05:00`
 
 - Objetivo: encapsular las reglas de transición de etapas fuera del CLI.
 - Contexto técnico: hoy `_select_stages()` en `ProcessMediaService` solo decide una tupla plana a partir de flags.
@@ -296,7 +302,15 @@ Scenario: Reanudar desde transcripción ya completada
 - Criterio de aceptación:
   - el plan de ejecución se deriva de metadata y reglas de dominio, no de `if` dispersos en CLI.
 
+- Resultado implementado:
+  - `PipelineStatePlanner` centraliza la selección secuencial de etapas, prerequisitos y decisiones `planned/reused/skipped`;
+  - `ProcessPlanItem` expone decisiones por etapa en vez de una tupla plana de stages;
+  - `pipeline.log` persiste el resumen de decisiones por etapa para runs nuevos y reanudados.
+
 #### WI-02-02 - Política cerrada de conflictos y reutilización de artefactos
+
+- Estado: hecho
+- Cerrado en: `2026-05-24T01:59:19-05:00`
 
 - Objetivo: distinguir claramente entre crear, reusar, sobrescribir y abortar.
 - Contexto técnico: hoy `ArtifactPlanner.prepare()` solo conoce `overwrite` y trata cualquier directorio existente como conflicto.
@@ -338,7 +352,15 @@ Scenario: Conflicto de artefactos sin overwrite
 - Criterio de aceptación:
   - el usuario nunca duda si el comando va a reusar o a sobrescribir artefactos.
 
+- Resultado implementado:
+  - se añadió `--resume` como flag canónico de reentrada;
+  - `--overwrite` permanece solo como alias deprecado de compatibilidad y emite warning visible;
+  - la reanudación falla de forma estricta ante metadata corrupta, metadata ausente con archivos presentes, artefactos incompletos o prerequisitos no satisfechos.
+
 #### WI-02-03 - Contrato de entrada para artifact directory
+
+- Estado: hecho
+- Cerrado en: `2026-05-24T01:59:19-05:00`
 
 - Objetivo: establecer que `report` y `clean` puedan tomar un artifact directory como input oficial.
 - Contexto técnico: hoy `process` recibe path de media o directorio de media; no hay contrato aún para operar sobre artefactos existentes.
@@ -375,6 +397,12 @@ Scenario: Directorio de artefactos válido para etapas posteriores
   - integración indirecta vía `process --only-report` o helpers de aplicación.
 - Criterio de aceptación:
   - existe una forma única y reusable de reconocer artifact directories.
+
+- Resultado implementado:
+  - `ArtifactRootValidator` valida internamente el sibling artifact root derivado desde el media source;
+  - el contrato sigue siendo interno en Sprint 02: `process` no acepta artifact roots como input público;
+  - el validador exige `metadata.json` v2 consistente y outputs mínimos por etapa completada;
+  - el README documenta explícitamente la matriz mínima de archivos requerida para reutilizar cada etapa completada.
 
 ## Epic 03: Fase 3
 
