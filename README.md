@@ -66,6 +66,17 @@ Version `0.1.0` treats the current bootstrap CLI surface as stable:
 | Planning selectors | `--only-transcribe`, `--only-report` | Constrain the planned stage set today; `--only-report` requires reusable transcription artifacts and `--resume` |
 | Metadata planning | `--language` | Recorded in pipeline metadata for future transcription execution |
 
+Resume validation currently assumes a sibling artifact directory named `<media_stem>_media_report`
+and requires a valid `metadata.json` plus the minimum outputs for every reused completed stage:
+
+| Stage | Required files for reuse |
+| --- | --- |
+| `extract_audio` | `audio_extracted.wav` |
+| `normalize_audio` | `audio_normalized.wav` |
+| `transcribe` | `transcript_raw.txt`, `transcript_segments.json` |
+| `report` | `prompt_used.md`, `llm_response_raw.txt`, `report.md` |
+| `pdf` | `report.pdf` |
+
 Example usage:
 
 ```bash

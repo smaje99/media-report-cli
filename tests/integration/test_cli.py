@@ -336,6 +336,23 @@ def test_process_resume_fails_for_corrupt_metadata(
     assert "Invalid artifact metadata" in result.stdout
 
 
+def test_process_resume_fails_when_metadata_is_missing_but_artifacts_exist(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    artifact_dir = single_media_path.parent / f"{single_media_path.stem}_media_report"
+    artifact_dir.mkdir()
+    (artifact_dir / "pipeline.log").write_text("orphaned artifact root\n", encoding="utf-8")
+    (artifact_dir / "transcript_raw.txt").write_text("transcript", encoding="utf-8")
+    (artifact_dir / "transcript_segments.json").write_text("[]", encoding="utf-8")
+
+    result = runner.invoke(app, ["process", str(single_media_path), "--resume", "--only-report"])
+
+    assert result.exit_code == 1
+    assert "Artifact metadata is missing" in result.stdout
+    assert "metadata.json" in result.stdout
+
+
 def test_process_resume_fails_for_incomplete_completed_stage(
     tmp_path: Path, monkeypatch, single_media_path: Path
 ) -> None:
