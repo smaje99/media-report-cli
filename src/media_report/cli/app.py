@@ -15,7 +15,7 @@ app = typer.Typer(
 
 app.command(
     "process",
-    help="Prepare or resume artifact planning for local media.",
+    help="Process or resume local media through audio preparation stages.",
 )(process_command)
 app.command(
     "doctor",

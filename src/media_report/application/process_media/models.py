@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from media_report.domain.artifacts.entities import ArtifactPlan, StageDecision
+from media_report.domain.artifacts.entities import ArtifactPlan, PipelineMetadata, StageDecision
 from media_report.domain.media.entities import MediaSource
 
 
@@ -28,6 +28,7 @@ class ProcessPlanItem:
     artifacts: ArtifactPlan
     template_name: str
     stage_decisions: tuple[StageDecision, ...]
+    final_metadata: PipelineMetadata
 
 
 @dataclass(frozen=True)

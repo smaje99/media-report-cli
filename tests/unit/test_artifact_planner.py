@@ -3,7 +3,11 @@ from pathlib import Path
 import pytest
 
 from media_report.core.errors import ArtifactConflictError
-from media_report.domain.artifacts.entities import PipelineStage, PipelineStageStatus
+from media_report.domain.artifacts.entities import (
+    PipelineStage,
+    PipelineStageStatus,
+    StageErrorSummary,
+)
 from media_report.domain.artifacts.service import ArtifactPlanner
 from media_report.domain.media.entities import MediaKind, MediaSource
 
@@ -65,3 +69,94 @@ def test_bootstrap_metadata_contains_stage_plan(tmp_path: Path) -> None:
     assert metadata.stages[PipelineStage.TRANSCRIBE].updated_at == metadata.generated_at
     assert metadata.stages[PipelineStage.TRANSCRIBE].error is None
     assert metadata.stages[PipelineStage.REPORT].finished_at == metadata.generated_at
+
+
+def test_mark_stage_running_updates_stage_status(tmp_path: Path) -> None:
+    media_path = tmp_path / "meeting.mp3"
+    media_path.write_text("x", encoding="utf-8")
+    planner = ArtifactPlanner()
+    artifact_plan = planner.prepare_new(media_path)
+    metadata = planner.bootstrap_metadata(
+        source=MediaSource(path=media_path, kind=MediaKind.AUDIO),
+        artifact_plan=artifact_plan,
+        template_name="generic",
+        llm_provider="ollama",
+        llm_model="llama3.1",
+        output_format="pdf",
+        language=None,
+        selected_stages=tuple(PipelineStage),
+    )
+
+    updated = planner.mark_stage_running(metadata, stage=PipelineStage.EXTRACT_AUDIO)
+
+    assert updated.stages[PipelineStage.EXTRACT_AUDIO].status == PipelineStageStatus.RUNNING
+    assert updated.stages[PipelineStage.EXTRACT_AUDIO].started_at is not None
+    assert updated.stages[PipelineStage.EXTRACT_AUDIO].finished_at is None
+    assert updated.stages[PipelineStage.EXTRACT_AUDIO].resumable is False
+
+
+def test_mark_stage_completed_clears_previous_error(tmp_path: Path) -> None:
+    media_path = tmp_path / "meeting.mp3"
+    media_path.write_text("x", encoding="utf-8")
+    planner = ArtifactPlanner()
+    artifact_plan = planner.prepare_new(media_path)
+    metadata = planner.bootstrap_metadata(
+        source=MediaSource(path=media_path, kind=MediaKind.AUDIO),
+        artifact_plan=artifact_plan,
+        template_name="generic",
+        llm_provider="ollama",
+        llm_model="llama3.1",
+        output_format="pdf",
+        language=None,
+        selected_stages=tuple(PipelineStage),
+    )
+    failed = planner.mark_stage_failed(
+        metadata,
+        stage=PipelineStage.EXTRACT_AUDIO,
+        error=StageErrorSummary(
+            type="MediaProcessingExecutionError",
+            code="execution_failed",
+            message="failed",
+        ),
+    )
+
+    completed = planner.mark_stage_completed(failed, stage=PipelineStage.EXTRACT_AUDIO)
+
+    assert completed.stages[PipelineStage.EXTRACT_AUDIO].status == PipelineStageStatus.COMPLETED
+    assert completed.stages[PipelineStage.EXTRACT_AUDIO].error is None
+    assert completed.stages[PipelineStage.EXTRACT_AUDIO].finished_at is not None
+    assert completed.stages[PipelineStage.EXTRACT_AUDIO].resumable is True
+
+
+def test_mark_stage_failed_records_error_summary(tmp_path: Path) -> None:
+    media_path = tmp_path / "meeting.mp3"
+    media_path.write_text("x", encoding="utf-8")
+    planner = ArtifactPlanner()
+    artifact_plan = planner.prepare_new(media_path)
+    metadata = planner.bootstrap_metadata(
+        source=MediaSource(path=media_path, kind=MediaKind.AUDIO),
+        artifact_plan=artifact_plan,
+        template_name="generic",
+        llm_provider="ollama",
+        llm_model="llama3.1",
+        output_format="pdf",
+        language=None,
+        selected_stages=tuple(PipelineStage),
+    )
+
+    failed = planner.mark_stage_failed(
+        metadata,
+        stage=PipelineStage.NORMALIZE_AUDIO,
+        error=StageErrorSummary(
+            type="MediaProcessingOutputError",
+            code="output_missing",
+            message="missing normalized output",
+        ),
+    )
+
+    assert failed.stages[PipelineStage.NORMALIZE_AUDIO].status == PipelineStageStatus.FAILED
+    error = failed.stages[PipelineStage.NORMALIZE_AUDIO].error
+    assert error is not None
+    assert error.code == "output_missing"
+    assert failed.stages[PipelineStage.NORMALIZE_AUDIO].finished_at is not None
+    assert failed.stages[PipelineStage.NORMALIZE_AUDIO].resumable is True

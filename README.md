@@ -60,10 +60,10 @@ Version `0.1.0` treats the current bootstrap CLI surface as stable:
 
 | Flag group | Flags | Bootstrap status |
 | --- | --- | --- |
-| Active now | `--recursive`, `--resume`, `--template` | Affect discovery, artifact reuse, and template planning today |
+| Active now | `--recursive`, `--resume`, `--template` | Affect discovery, artifact reuse, and audio-prep execution today |
 | Deprecated compatibility | `--overwrite` | Deprecated alias for `--resume` during Sprint 2; destructive overwrite is intentionally not exposed yet |
 | Active for planning | `--provider`, `--model`, `--output-format` | Affect planned workflow metadata and remote-provider warning today |
-| Planning selectors | `--only-transcribe`, `--only-report` | Constrain the planned stage set today; `--only-report` requires reusable transcription artifacts and `--resume` |
+| Planning selectors | `--only-transcribe`, `--only-report` | `--only-transcribe` runs audio prep and leaves transcription planned; `--only-report` requires reusable transcription artifacts and `--resume` |
 | Metadata planning | `--language` | Recorded in pipeline metadata for future transcription execution |
 
 Resume validation currently assumes a sibling artifact directory named `<media_stem>_media_report`
@@ -94,15 +94,16 @@ media-report config init
 - Validates media input paths
 - Detects supported audio and video files
 - Creates per-file artifact directories next to the source media
-- Writes bootstrap `metadata.json` and `pipeline.log`
+- Executes `extract_audio` and `normalize_audio` during `process`
+- Writes and updates `metadata.json` and `pipeline.log`
 - Reuses valid sibling artifact directories when invoked with `--resume`
-- Validates existing metadata strictly before planning a resumed run
-- Prints per-stage planning decisions (`planned`, `reused`, `skipped`)
+- Validates existing metadata strictly before executing a resumed run
+- Prints per-stage decisions and final audio-stage status
 - Loads packaged prompt and PDF templates from installed package resources
 - Checks external tooling availability with `doctor`
 - Manages config at `~/.config/media-report/config.toml`
 
-Full FFmpeg, transcription, LLM generation, and PDF rendering adapters are scaffolded as interfaces for later phases but are not yet wired into a full end-to-end processing pipeline.
+Audio preparation through FFmpeg is wired into `process`. Transcription, LLM generation, and PDF rendering remain planned for later phases.
 
 ## External Dependencies
 

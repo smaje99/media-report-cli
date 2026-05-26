@@ -11,6 +11,8 @@ from media_report.application.process_media.service import ProcessMediaService
 from media_report.core.console import console
 from media_report.core.errors import ArtifactConflictError, MediaReportError
 from media_report.core.settings import load_settings
+from media_report.domain.artifacts.entities import PipelineStage
+from media_report.infrastructure.ffmpeg.service import FFmpegService
 from media_report.infrastructure.filesystem.metadata_repository import (
     JsonPipelineMetadataRepository,
 )
@@ -28,7 +30,10 @@ def process_command(
         bool,
         typer.Option(
             "--resume",
-            help="Reuse a valid sibling artifact directory and plan only the stages still needed.",
+            help=(
+                "Reuse a valid sibling artifact directory and execute only the stages "
+                "still needed."
+            ),
         ),
     ] = False,
     overwrite: Annotated[
@@ -90,15 +95,17 @@ def process_command(
         ),
     ] = False,
 ) -> None:
-    """Prepare or resume artifact planning, persist metadata, and print per-stage decisions."""
+    """Process or resume local media through audio preparation stages."""
     settings = load_settings()
     scanner = FileSystemMediaScanner()
     templates = PackagePromptTemplateRepository()
     metadata_repository = JsonPipelineMetadataRepository()
+    media_processor = FFmpegService()
     service = ProcessMediaService(
         scanner=scanner,
         templates=templates,
         metadata_repository=metadata_repository,
+        media_processor=media_processor,
     )
 
     try:
@@ -136,12 +143,13 @@ def process_command(
             "Transcripts may leave the local machine."
         )
 
-    table = Table(title="Planned Media Runs")
+    table = Table(title="Media Runs")
     table.add_column("Source")
     table.add_column("Kind")
     table.add_column("Artifacts")
     table.add_column("Template")
     table.add_column("Stage Decisions")
+    table.add_column("Audio Status")
 
     for item in plan.items:
         table.add_row(
@@ -153,6 +161,14 @@ def process_command(
                 f"{decision.stage.value}: {decision.decision.value} ({decision.reason})"
                 for decision in item.stage_decisions
             ),
+            "\n".join(
+                (
+                    f"extract_audio: "
+                    f"{item.final_metadata.stages[PipelineStage.EXTRACT_AUDIO].status.value}",
+                    f"normalize_audio: "
+                    f"{item.final_metadata.stages[PipelineStage.NORMALIZE_AUDIO].status.value}",
+                )
+            ),
         )
 
     console.print(table)
@@ -162,6 +178,14 @@ def process_command(
                 f"{item.source.path.name} :: {decision.stage.value}: "
                 f"{decision.decision.value} - {decision.reason}"
             )
+        console.print(
+            f"{item.source.path.name} :: extract_audio status: "
+            f"{item.final_metadata.stages[PipelineStage.EXTRACT_AUDIO].status.value}"
+        )
+        console.print(
+            f"{item.source.path.name} :: normalize_audio status: "
+            f"{item.final_metadata.stages[PipelineStage.NORMALIZE_AUDIO].status.value}"
+        )
     console.print(
-        f"Prepared {len(plan.items)} artifact director{'y' if len(plan.items) == 1 else 'ies'}."
+        f"Processed {len(plan.items)} artifact director{'y' if len(plan.items) == 1 else 'ies'}."
     )

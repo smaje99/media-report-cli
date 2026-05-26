@@ -21,6 +21,7 @@ from media_report.domain.artifacts.entities import (
     PipelineStageStatus,
     PipelineWorkflowMetadata,
     StageDecision,
+    StageErrorSummary,
 )
 from media_report.domain.media.entities import MediaSource
 
@@ -159,6 +160,69 @@ class ArtifactPlanner:
                     f"{decision.stage.value}: {decision.decision.value} - {decision.reason}\n"
                 )
 
+    def append_log_event(self, artifact_root: Path, message: str) -> None:
+        log_path = artifact_root / "pipeline.log"
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(f"{message}\n")
+
+    def mark_stage_running(
+        self,
+        metadata: PipelineMetadata,
+        *,
+        stage: PipelineStage,
+    ) -> PipelineMetadata:
+        now = self._now()
+        current = metadata.stages[stage]
+        updated_stage = replace(
+            current,
+            status=PipelineStageStatus.RUNNING,
+            resumable=False,
+            started_at=now,
+            finished_at=None,
+            updated_at=now,
+            error=None,
+        )
+        return replace(metadata, stages={**metadata.stages, stage: updated_stage})
+
+    def mark_stage_completed(
+        self,
+        metadata: PipelineMetadata,
+        *,
+        stage: PipelineStage,
+    ) -> PipelineMetadata:
+        now = self._now()
+        current = metadata.stages[stage]
+        updated_stage = replace(
+            current,
+            status=PipelineStageStatus.COMPLETED,
+            resumable=True,
+            started_at=current.started_at or now,
+            finished_at=now,
+            updated_at=now,
+            error=None,
+        )
+        return replace(metadata, stages={**metadata.stages, stage: updated_stage})
+
+    def mark_stage_failed(
+        self,
+        metadata: PipelineMetadata,
+        *,
+        stage: PipelineStage,
+        error: StageErrorSummary,
+    ) -> PipelineMetadata:
+        now = self._now()
+        current = metadata.stages[stage]
+        updated_stage = replace(
+            current,
+            status=PipelineStageStatus.FAILED,
+            resumable=True,
+            started_at=current.started_at or now,
+            finished_at=now,
+            updated_at=now,
+            error=error,
+        )
+        return replace(metadata, stages={**metadata.stages, stage: updated_stage})
+
     @staticmethod
     def _build_workflow_metadata(
         *,
@@ -197,6 +261,10 @@ class ArtifactPlanner:
             updated_at=generated_at,
             error=None,
         )
+
+    @staticmethod
+    def _now() -> str:
+        return datetime.now(UTC).isoformat()
 
 
 class ArtifactRootValidator:
@@ -246,11 +314,10 @@ class ArtifactRootValidator:
             if metadata.stages[stage].status != PipelineStageStatus.COMPLETED:
                 continue
 
-            missing_outputs = self.missing_outputs_for_stage(
+            if missing_outputs := self.missing_outputs_for_stage(
                 artifact_plan=artifact_plan,
                 stage=stage,
-            )
-            if missing_outputs:
+            ):
                 missing_names = ", ".join(path.name for path in missing_outputs)
                 raise ArtifactMetadataError(
                     f"Stage '{stage.value}' is marked completed but "
