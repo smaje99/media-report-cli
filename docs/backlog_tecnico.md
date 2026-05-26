@@ -408,6 +408,9 @@ Scenario: Directorio de artefactos válido para etapas posteriores
 
 ### Sprint 03 - Extracción y normalización con FFmpeg
 
+- Estado: hecho
+- Cerrado en: `2026-05-26T13:38:47-05:00`
+
 - Objetivo del sprint: ejecutar extracción y normalización reales manteniendo FFmpeg encapsulado en infraestructura.
 - Alcance:
   - port de media processing;
@@ -427,6 +430,14 @@ Scenario: Directorio de artefactos válido para etapas posteriores
   - dependencia real de binario externo en pruebas.
 - Criterio de salida:
   - `process` ejecuta extracción y normalización en Linux/macOS con pruebas unitarias y al menos una integración con binario mockeado.
+- Resultado implementado:
+  - `MediaProcessingService` quedó formalizado con contratos explícitos para extracción y normalización;
+  - `FFmpegService` ahora cubre construcción de comandos, ejecución real de subprocess y mapeo de errores tipados;
+  - `process` dejó de ser planning-only y ejecuta `extract_audio` y `normalize_audio` preservando la separación entre CLI, aplicación e infraestructura;
+  - `metadata.json` v2 y `pipeline.log` se actualizan durante ejecución real con transiciones `running`, `completed` y `failed`;
+  - el artifact root conserva `audio_extracted.wav` y `audio_normalized.wav` cuando el flujo avanza, y preserva fallo parcial cuando normalización cae;
+  - la reanudación por etapas reutiliza outputs válidos y permite continuar desde extracción completada hacia normalización;
+  - la cobertura del sprint queda respaldada por unitarias y por integración CLI con adaptador mockeado.
 - Tareas transversales:
   - alinear la definición de done con outputs reales `audio_extracted.wav` y `audio_normalized.wav`;
   - exigir metadata consistente por etapa con estados `running`, `completed` y `failed`;
@@ -547,6 +558,9 @@ Scenario: Extraer audio desde video
 
 #### WI-03-02 - Cablear `process` a etapas reales de audio
 
+- Estado: hecho
+- Cerrado en: `2026-05-26T13:35:10-05:00`
+
 - Objetivo: pasar de planificación a ejecución real en las primeras dos etapas.
 - Contexto técnico: `ProcessMediaService.process()` hoy solo crea artefactos y devuelve plan.
 - Alcance funcional:
@@ -621,6 +635,17 @@ Scenario: Procesar archivo y detenerse antes de transcribir
     - actualizar el criterio de aceptación para exigir ejecución real, no solo planificación;
     - reflejar en backlog y README que Sprint 03 deja listo el handoff hacia `transcribe`;
     - añadir nota indicando que `doctor` ya detecta `ffmpeg`, pero Sprint 03 convierte esa validación en dependencia operativa real.
+
+- Resultado implementado:
+  - `ProcessMediaService` ahora inyecta `MediaProcessingService` y ejecuta `extract_audio` y `normalize_audio` cuando las decisiones de etapa quedan `planned`;
+  - la planificación y la ejecución real quedaron separadas: `stage_decisions` siguen guiando el flujo, pero `process` ya no se queda en planning-only;
+  - `ArtifactPlanner` incorpora helpers puros para transiciones `running`, `completed` y `failed`, además de logging operativo en `pipeline.log`;
+  - `metadata.json` v2 se actualiza en tiempo real durante bootstrap, entrada a `running`, completion y fallo parcial, sin cambiar `schema_version`;
+  - los errores de media processing se mapean a `StageErrorSummary` con códigos estables para ausencia de `ffmpeg`, ejecución fallida y output faltante;
+  - `process` preserva `audio_extracted.wav` cuando falla `normalize_audio` y deja el artifact root listo para reanudación;
+  - la CLI ahora instancia `FFmpegService`, refleja estados finales de audio prep y deja de describir `process` como artifact planning-only;
+  - README y pruebas de integración se actualizaron para reflejar que Sprint 03 ya ejecuta extracción y normalización reales;
+  - la ejecución sigue detenida antes de `transcribe`, `report` y `pdf`, que permanecen como trabajo de sprints posteriores.
 
 ## Epic 04: Fase 4
 
