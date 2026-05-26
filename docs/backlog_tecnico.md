@@ -427,6 +427,38 @@ Scenario: Directorio de artefactos válido para etapas posteriores
   - dependencia real de binario externo en pruebas.
 - Criterio de salida:
   - `process` ejecuta extracción y normalización en Linux/macOS con pruebas unitarias y al menos una integración con binario mockeado.
+- Tareas transversales:
+  - alinear la definición de done con outputs reales `audio_extracted.wav` y `audio_normalized.wav`;
+  - exigir metadata consistente por etapa con estados `running`, `completed` y `failed`;
+  - asegurar error claro cuando `ffmpeg` no está disponible;
+  - exigir cobertura unitaria y al menos una integración con subprocess mockeado.
+- Dependencias internas:
+  - reutilizar `ArtifactPlanner`, `ArtifactRootValidator`, `PipelineStatePlanner`, `JsonPipelineMetadataRepository` y `FileSystemMediaScanner`;
+  - aprovechar el esquema `metadata.json` v2 ya vigente, sin introducir una v3 en este sprint.
+- Riesgos técnicos concretos:
+  - diferencias entre entradas audio y video al decidir cómo producir `audio_extracted.wav`;
+  - falso positivo de etapa completada si existe el archivo pero no se actualiza metadata;
+  - fragilidad de pruebas si se acopla la suite al binario real de `ffmpeg`;
+  - necesidad de cerrar una ruta consistente para fuentes de audio sin bifurcar la semántica del pipeline.
+- Decisiones cerradas para el sprint:
+  - sin paralelización;
+  - sin limpieza automática de artefactos;
+  - sin cambios de flags públicos;
+  - sin ejecución real de transcripción, LLM o PDF.
+- Cambios importantes de interfaces y tipos:
+  - `MediaProcessingService` deja de ser un port mínimo de una sola operación y pasa a cubrir extracción y normalización;
+  - `ProcessMediaService` pasa de devolver solo un plan a ejecutar parcialmente el pipeline y persistir progreso real;
+  - `PipelineMetadata` conserva la versión 2, pero sus estados pasan de bootstrap a ejecución operativa real;
+  - `FFmpegService` deja de ser solo builder y pasa a ser adaptador con ejecución controlada.
+- Escenarios de prueba de referencia:
+  - procesar video nominal y generar ambos WAV;
+  - procesar audio nominal y generar ambos WAV con una ruta consistente;
+  - fallar con mensaje claro cuando `ffmpeg` no está en `PATH`;
+  - fallar normalización preservando extracción y registrando `failed`;
+  - reanudar una corrida donde extracción ya estaba completada;
+  - rechazar metadata que marque `completed` sin outputs presentes;
+  - mantener `--only-report` bloqueado en corridas nuevas;
+  - mantener CLI estable sin renombrar `media-report` ni `process`.
 
 #### WI-03-01 - Formalizar el port `MediaProcessingService`
 
@@ -471,6 +503,35 @@ Scenario: Extraer audio desde video
   - integración con monkeypatch/subprocess fake.
 - Criterio de aceptación:
   - aplicación depende del port, no de listas de strings FFmpeg.
+- Desglose de tareas:
+  - Arquitectura:
+    - cerrar el contrato del port `MediaProcessingService` en `domain.media.ports` para cubrir `extract_audio` y `normalize_audio`;
+    - definir requests y resultados propios del dominio o de aplicación para no propagar listas de argumentos FFmpeg fuera de infraestructura;
+    - definir errores de dominio/aplicación para binario ausente, ejecución fallida, output no generado y formato no soportado;
+    - mantener la dependencia desde aplicación hacia el port, sin imports desde `application` a `infrastructure.ffmpeg.service`.
+  - Negocio/valor:
+    - documentar que este port habilita el primer avance real del pipeline y reduce el riesgo de bloqueo para Sprint 04;
+    - dejar explícito que el valor de negocio del sprint es producir WAV trazables y reutilizables, no transcribir todavía.
+  - Funcional:
+    - definir comportamiento para fuente `video` con extracción a mono 16 kHz hacia `audio_extracted.wav`;
+    - definir comportamiento para fuente `audio` con una ruta consistente que también produzca `audio_extracted.wav`;
+    - definir la etapa de normalización para producir `audio_normalized.wav` a partir del artefacto extraído;
+    - fijar que ambos outputs viven en el artifact root calculado por `ArtifactPlanner`;
+    - precisar que el adaptador FFmpeg encapsula construcción de comando, ejecución, captura de stderr y validación de output.
+  - No funcional:
+    - registrar comando, duración, exit code y resumen de stderr en `pipeline.log` sin exponer secretos;
+    - garantizar comportamiento equivalente en Linux y macOS, dejando Windows como experimental;
+    - mantener `ffmpeg` como dependencia externa al sistema y fuera de dependencias Python pesadas;
+    - asegurar errores deterministas y legibles para CLI y futura integración con `doctor`.
+  - Pruebas:
+    - añadir unit tests para builders de extracción y normalización;
+    - añadir unit tests de mapeo de errores de subprocess a errores del proyecto;
+    - añadir tests para outputs inexistentes o parciales;
+    - mantener las pruebas sin invocar `ffmpeg` real, usando doubles o monkeypatch.
+  - Documentación/aceptación:
+    - actualizar el criterio de aceptación para exigir soporte explícito a audio y video;
+    - añadir nota de diseño sobre por qué FFmpeg queda contenido en infraestructura;
+    - dejar escrito que el contrato del port se cierra antes de cablear `process`.
 
 #### WI-03-02 - Cablear `process` a etapas reales de audio
 
@@ -515,6 +576,39 @@ Scenario: Procesar archivo y detenerse antes de transcribir
   - tests de fallo parcial preservando `audio_extracted.wav`.
 - Criterio de aceptación:
   - `process` deja el pipeline realmente avanzado, no solo planificado.
+- Desglose de tareas:
+  - Arquitectura:
+    - inyectar `MediaProcessingService` en `ProcessMediaService`;
+    - separar explícitamente la planificación (`stage_decisions`) de la ejecución real por etapa;
+    - introducir helpers para actualizar metadata por etapa en `running`, `completed` y `failed` reutilizando el esquema v2;
+    - mantener CLI como capa de entrada y salida, dejando la secuencia de ejecución en aplicación.
+  - Negocio/valor:
+    - dejar explícito que el objetivo del sprint es que `process` deje de ser planning-only;
+    - alinear la HU con el uso principal del producto: dejar un artifact root útil para retomar con transcripción en Sprint 04.
+  - Funcional:
+    - ejecutar `extract_audio` cuando la decisión de etapa sea `planned`;
+    - ejecutar `normalize_audio` solo cuando extracción termine correctamente o haya sido `reused`;
+    - respetar decisiones `reused` y `skipped` generadas por `PipelineStatePlanner`;
+    - persistir `audio_extracted.wav` y `audio_normalized.wav` en el artifact root;
+    - mantener `--only-transcribe` como ejecución hasta `normalize_audio`, dejando `transcribe` solo planificada;
+    - mantener `--only-report` bloqueado para corridas nuevas y funcional solo con `--resume` y prerequisitos satisfechos;
+    - preservar artefactos previos si falla `normalize_audio`, sin borrar `audio_extracted.wav`.
+  - No funcional:
+    - actualizar metadata en tiempo real con `started_at`, `updated_at`, `finished_at`, `error` y `resumable`;
+    - asegurar consistencia entre metadata y filesystem: ninguna etapa queda `completed` si falta su output;
+    - emitir mensajes de CLI y `pipeline.log` coherentes con el estado real, no solo con el plan original;
+    - mantener ejecución secuencial por archivo;
+    - evitar stack traces en errores esperados de entorno como ausencia de `ffmpeg`.
+  - Pruebas:
+    - añadir unit tests de `ProcessMediaService` con stub de `MediaProcessingService`;
+    - añadir tests de transición `planned -> running -> completed` y `planned -> running -> failed`;
+    - añadir integración CLI donde `process` genera ambos WAV con adaptador mockeado;
+    - añadir integración de fallo parcial donde extracción queda completada y normalización falla;
+    - verificar reanudación cuando `extract_audio` ya está `completed` y solo debe ejecutarse `normalize_audio`.
+  - Documentación/aceptación:
+    - actualizar el criterio de aceptación para exigir ejecución real, no solo planificación;
+    - reflejar en backlog y README que Sprint 03 deja listo el handoff hacia `transcribe`;
+    - añadir nota indicando que `doctor` ya detecta `ffmpeg`, pero Sprint 03 convierte esa validación en dependencia operativa real.
 
 ## Epic 04: Fase 4
 
