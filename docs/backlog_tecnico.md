@@ -462,6 +462,9 @@ Scenario: Directorio de artefactos válido para etapas posteriores
 
 #### WI-03-01 - Formalizar el port `MediaProcessingService`
 
+- Estado: hecho
+- Cerrado en: `2026-05-26T12:49:21-05:00`
+
 - Objetivo: sacar el conocimiento de FFmpeg de la capa de aplicación.
 - Contexto técnico: existe `FFmpegService.build_extract_command()` pero no un port estable ni una implementación completa para normalización.
 - Alcance funcional:
@@ -532,6 +535,15 @@ Scenario: Extraer audio desde video
     - actualizar el criterio de aceptación para exigir soporte explícito a audio y video;
     - añadir nota de diseño sobre por qué FFmpeg queda contenido en infraestructura;
     - dejar escrito que el contrato del port se cierra antes de cablear `process`.
+
+- Resultado implementado:
+  - `MediaProcessingService` quedó expandido con operaciones explícitas de `extract_audio` y `normalize_audio`;
+  - `domain.media.entities` ahora modela requests y results tipados para extracción, normalización y retorno de ejecución;
+  - `core.errors` incorpora errores específicos de media processing para ausencia de `ffmpeg`, exit code no cero y output faltante;
+  - `FFmpegService` dejó de ser solo builder y ahora ejecuta subprocess, resume `stderr`, mide duración y valida outputs;
+  - la validación de formatos soportados sigue en `FileSystemMediaScanner`, evitando duplicación en el adaptador;
+  - la cobertura unitaria valida builders, mapeo de errores y casos de éxito sin depender del binario real.
+  - el logging a `pipeline.log` y la actualización de metadata por etapa quedan diferidos a WI-03-02, que es donde entra la orquestación real del pipeline.
 
 #### WI-03-02 - Cablear `process` a etapas reales de audio
 
