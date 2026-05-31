@@ -32,6 +32,12 @@ uv sync --extra dev
 uv run media-report doctor
 ```
 
+To enable local transcription support during development:
+
+```bash
+uv sync --extra transcription
+```
+
 Repository-local tool install:
 
 ```bash
@@ -117,6 +123,9 @@ The package intentionally keeps heavyweight tools external to the Python depende
 Optional Python dependencies:
 
 - `faster-whisper` via the `transcription` extra
+
+`media-report doctor` reports whether the optional transcription capability is available and
+shows the install hint when it is not.
 
 ## Configuration
 

@@ -41,10 +41,13 @@ class MediaProcessingExecutionError(MediaProcessingError):
     """Raised when a media processing command exits unsuccessfully."""
 
     def __init__(self, *, operation: str, exit_code: int, stderr_summary: str | None) -> None:
-        message = (
-            f"ffmpeg failed during '{operation}' with exit code {exit_code}: "
-            f"{stderr_summary}" if stderr_summary else f"ffmpeg failed during '{operation}' with exit code {exit_code}."
-        )
+        if stderr_summary:
+            message = (
+                f"ffmpeg failed during '{operation}' with exit code {exit_code}: "
+                f"{stderr_summary}"
+            )
+        else:
+            message = f"ffmpeg failed during '{operation}' with exit code {exit_code}."
         super().__init__(message)
         self.operation = operation
         self.exit_code = exit_code
@@ -53,3 +56,63 @@ class MediaProcessingExecutionError(MediaProcessingError):
 
 class MediaProcessingOutputError(MediaProcessingError):
     """Raised when a media processing command does not produce its expected output."""
+
+
+class OptionalDependencyMissingError(MediaReportError):
+    """Raised when an optional Python dependency is required for a feature."""
+
+    def __init__(
+        self,
+        *,
+        dependency_name: str,
+        feature_name: str,
+        install_hint: str,
+    ) -> None:
+        message = (
+            f"Optional dependency '{dependency_name}' is required for {feature_name}. "
+            f"Install it with {install_hint}"
+        )
+        super().__init__(message)
+        self.dependency_name = dependency_name
+        self.feature_name = feature_name
+        self.install_hint = install_hint
+
+
+class TranscriptionModelError(MediaReportError):
+    """Raised when a transcription provider cannot initialize its model."""
+
+    def __init__(self, *, provider: str, model: str, detail: str | None = None) -> None:
+        message = f"{provider} could not initialize model '{model}'."
+        if detail:
+            message = f"{message} {detail}"
+        super().__init__(message)
+        self.provider = provider
+        self.model = model
+        self.detail = detail
+
+
+class TranscriptionExecutionError(MediaReportError):
+    """Raised when a transcription provider fails while processing audio."""
+
+    def __init__(
+        self,
+        *,
+        provider: str,
+        model: str,
+        audio_path: str,
+        detail: str | None = None,
+    ) -> None:
+        message = (
+            f"{provider} failed to transcribe '{audio_path}' with model '{model}'."
+        )
+        if detail:
+            message = f"{message} {detail}"
+        super().__init__(message)
+        self.provider = provider
+        self.model = model
+        self.audio_path = audio_path
+        self.detail = detail
+
+
+class TranscriptionOutputError(MediaReportError):
+    """Raised when a transcription provider returns invalid output."""

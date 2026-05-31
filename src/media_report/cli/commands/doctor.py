@@ -3,11 +3,13 @@ from __future__ import annotations
 import platform
 import shutil
 
+from rich.markup import escape
 from rich.table import Table
 
 from media_report.core.console import console
 from media_report.core.resources import list_pdf_templates, list_prompt_templates
 from media_report.core.settings import load_settings, redact_settings
+from media_report.infrastructure.transcription import get_transcription_capability
 
 
 def doctor_command() -> None:
@@ -35,6 +37,17 @@ def doctor_command() -> None:
             "ok" if resolved else "missing",
             resolved or "not found in PATH",
         )
+
+    transcription = get_transcription_capability()
+    table.add_row(
+        "transcription",
+        "ok" if transcription.available else "missing",
+        escape(
+            f"{transcription.provider}: {transcription.detail}"
+            if transcription.available
+            else f"{transcription.provider}: {transcription.install_hint}"
+        ),
+    )
 
     table.add_row("prompt templates", "ok", ", ".join(list_prompt_templates()))
     table.add_row("pdf templates", "ok", ", ".join(list_pdf_templates()))

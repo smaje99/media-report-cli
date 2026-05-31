@@ -14,8 +14,13 @@ from media_report.infrastructure.filesystem.metadata_repository import (
     JsonPipelineMetadataRepository,
 )
 from media_report.infrastructure.filesystem.scanner import FileSystemMediaScanner
+from media_report.infrastructure.transcription import TranscriptionCapability
 
 runner = CliRunner()
+TRANSCRIPTION_HINT = (
+    '`pip install "media-report-cli[transcription]"` '
+    "or `uv sync --extra transcription`."
+)
 
 
 def combined_output(result: object) -> str:
@@ -217,12 +222,45 @@ def test_config_init_existing_file_exits_with_code_two(tmp_path: Path) -> None:
 
 def test_doctor_reports_dependencies(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    monkeypatch.setattr(
+        "media_report.cli.commands.doctor.get_transcription_capability",
+        lambda: TranscriptionCapability(
+            provider="faster-whisper",
+            available=False,
+            detail="missing",
+            install_hint=TRANSCRIPTION_HINT,
+        ),
+    )
 
     result = runner.invoke(app, ["doctor"])
 
     assert result.exit_code == 0
     assert "prompt templates" in result.stdout
     assert "ffmpeg" in result.stdout
+    assert "transcription" in result.stdout
+    assert "faster-whisper" in result.stdout
+    assert "media-report-cli[transcription]" in result.stdout
+    assert "extra transcription" in result.stdout
+
+
+def test_doctor_reports_transcription_available(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    monkeypatch.setattr(
+        "media_report.cli.commands.doctor.get_transcription_capability",
+        lambda: TranscriptionCapability(
+            provider="faster-whisper",
+            available=True,
+            detail="Optional dependency is installed.",
+        ),
+    )
+
+    result = runner.invoke(app, ["doctor"])
+
+    assert result.exit_code == 0
+    assert "transcription" in result.stdout
+    assert "faster-whisper" in result.stdout
+    assert "Optional dependency is" in result.stdout
+    assert "installed." in result.stdout
 
 
 def test_process_creates_artifact_directory_and_metadata(
