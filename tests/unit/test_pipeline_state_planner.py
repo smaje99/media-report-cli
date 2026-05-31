@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -17,6 +18,25 @@ from media_report.domain.artifacts.service import (
     PipelineStatePlanner,
 )
 from media_report.domain.media.entities import MediaKind, MediaSource
+
+
+def structured_transcript_payload(text: str = "transcript") -> str:
+    return json.dumps(
+        {
+            "provider": "stub",
+            "model": "stub-small",
+            "requested_language": None,
+            "detected_language": "en",
+            "segments": [
+                {
+                    "index": 0,
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.0,
+                    "text": text,
+                }
+            ],
+        }
+    )
 
 
 def build_metadata(tmp_path: Path):
@@ -73,7 +93,10 @@ def test_plan_resume_reuses_completed_stages_and_plans_tail(tmp_path: Path) -> N
     artifact_plan.audio_extracted.write_text("audio", encoding="utf-8")
     artifact_plan.audio_normalized.write_text("audio", encoding="utf-8")
     artifact_plan.transcript_raw.write_text("transcript", encoding="utf-8")
-    artifact_plan.transcript_segments.write_text("[]", encoding="utf-8")
+    artifact_plan.transcript_segments.write_text(
+        structured_transcript_payload(),
+        encoding="utf-8",
+    )
     validator.validate(
         source=MediaSource(path=Path(metadata.source.path), kind=MediaKind.AUDIO),
         artifact_plan=artifact_plan,
@@ -120,6 +143,34 @@ def test_validator_rejects_completed_stage_without_outputs(tmp_path: Path) -> No
     )
 
     with pytest.raises(ArtifactMetadataError, match="required artifacts are missing"):
+        validator.validate(
+            source=MediaSource(path=media_path, kind=MediaKind.AUDIO),
+            artifact_plan=artifact_plan,
+            metadata=metadata,
+        )
+
+
+def test_validator_rejects_completed_transcription_with_legacy_segments_shape(
+    tmp_path: Path,
+) -> None:
+    media_path, artifact_plan, metadata = build_metadata(tmp_path)
+    validator = ArtifactRootValidator()
+
+    metadata = replace(
+        metadata,
+        stages={
+            **metadata.stages,
+            PipelineStage.TRANSCRIBE: replace(
+                metadata.stages[PipelineStage.TRANSCRIBE],
+                status=PipelineStageStatus.COMPLETED,
+                finished_at=metadata.generated_at,
+            ),
+        },
+    )
+    artifact_plan.transcript_raw.write_text("transcript", encoding="utf-8")
+    artifact_plan.transcript_segments.write_text("[]", encoding="utf-8")
+
+    with pytest.raises(ArtifactMetadataError, match="structured contract"):
         validator.validate(
             source=MediaSource(path=media_path, kind=MediaKind.AUDIO),
             artifact_plan=artifact_plan,

@@ -24,6 +24,25 @@ def combined_output(result: object) -> str:
     return f"{stdout}{stderr}"
 
 
+def structured_transcript_payload(text: str = "transcript") -> str:
+    return json.dumps(
+        {
+            "provider": "stub",
+            "model": "stub-small",
+            "requested_language": None,
+            "detected_language": "en",
+            "segments": [
+                {
+                    "index": 0,
+                    "start_seconds": 0.0,
+                    "end_seconds": 1.0,
+                    "text": text,
+                }
+            ],
+        }
+    )
+
+
 def stub_media_processing(monkeypatch, *, fail_normalize: bool = False) -> None:
     def fake_extract(self, request):  # type: ignore[no-untyped-def]
         request.output_path.write_text("audio", encoding="utf-8")
@@ -94,7 +113,10 @@ def write_resume_ready_metadata(media_path: Path) -> Path:
     artifact_plan.audio_extracted.write_text("audio", encoding="utf-8")
     artifact_plan.audio_normalized.write_text("audio", encoding="utf-8")
     artifact_plan.transcript_raw.write_text("transcript", encoding="utf-8")
-    artifact_plan.transcript_segments.write_text("[]", encoding="utf-8")
+    artifact_plan.transcript_segments.write_text(
+        structured_transcript_payload(),
+        encoding="utf-8",
+    )
     return artifact_plan.root_dir
 
 
@@ -392,7 +414,10 @@ def test_process_resume_fails_when_metadata_is_missing_but_artifacts_exist(
     artifact_dir.mkdir()
     (artifact_dir / "pipeline.log").write_text("orphaned artifact root\n", encoding="utf-8")
     (artifact_dir / "transcript_raw.txt").write_text("transcript", encoding="utf-8")
-    (artifact_dir / "transcript_segments.json").write_text("[]", encoding="utf-8")
+    (artifact_dir / "transcript_segments.json").write_text(
+        structured_transcript_payload(),
+        encoding="utf-8",
+    )
 
     result = runner.invoke(app, ["process", str(single_media_path), "--resume", "--only-report"])
 
