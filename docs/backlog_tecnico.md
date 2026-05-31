@@ -746,6 +746,9 @@ Scenario: Transcribir audio normalizado
 
 #### WI-04-02 - Implementar `FasterWhisperProvider` y feature gating
 
+- Estado: hecho
+- Cerrado en: `2026-05-31T13:11:34-05:00`
+
 - Objetivo: soportar la primera implementación real del port de transcripción.
 - Contexto técnico: `faster_whisper_provider.py` hoy solo levanta `NotImplementedError`.
 - Alcance funcional:
@@ -800,6 +803,15 @@ Scenario: Ejecutar transcribe sin extra instalada
 - Cierre esperado del WI:
   - el port queda realmente implementado y seleccionable;
   - la ausencia de la extra `transcription` falla de forma clara, estable y documentada.
+- Resultado implementado:
+  - `FasterWhisperProvider` dejó de ser un stub y ahora instancia `WhisperModel` con import lazy de `faster_whisper`, resolviendo el modelo efectivo con precedencia de `model_override` sobre `MEDIA_REPORT_WHISPER_MODEL`;
+  - la salida del SDK queda encapsulada en infraestructura y mapeada a `TranscriptionResult` y `TranscriptionSegment`, con normalización explícita de idioma detectado, tiempos y `confidence` opcional;
+  - se introdujeron errores tipados para dependencia opcional ausente, inicialización de modelo inválida, fallo de ejecución y salida inconsistente, todos con mensajes accionables y sin stack trace innecesario hacia CLI;
+  - se agregó un capability probe reutilizable para transcripción que detecta si la extra opcional está disponible y expone el hint de instalación sin descargar modelos ni validar catálogos concretos;
+  - `media-report doctor` ahora reporta la capacidad de transcripción en una fila dedicada, distinguiendo disponibilidad real de la extra y preservando el hint de instalación en la salida renderizada;
+  - README quedó actualizado con la instalación de la extra `transcription` y con la expectativa de observabilidad desde `doctor`;
+  - la cobertura de pruebas valida import lazy, precedence de modelo, mapeo del provider, errores tipados y los dos estados visibles de `doctor` con y sin capacidad de transcripción disponible;
+  - la mensajería pública del futuro comando `transcribe` quedó preparada por los errores tipados y el feature probe, mientras que el comando dedicado sigue reservado para WI-04-03.
 
 #### WI-04-03 - Exponer `media-report transcribe`
 
