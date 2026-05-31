@@ -715,6 +715,23 @@ Scenario: Transcribir audio normalizado
   - integración CLI con stub de transcripción.
 - Criterio de aceptación:
   - el resultado de transcripción ya no obliga a reinterpretar texto libre aguas abajo.
+- Tareas técnicas del WI:
+  - definir `TranscriptionRequest`, `TranscriptionSegment` y `TranscriptionResult` como contrato estable del dominio;
+  - evolucionar el port `TranscriptionProvider` para recibir `audio_path`, `requested_language` y `model_override`;
+  - fijar `transcript_segments.json` con raíz tipo objeto y campos `provider`, `model`, `requested_language`, `detected_language` y `segments`;
+  - fijar cada segmento con `index`, `start_seconds`, `end_seconds`, `text` y `confidence` opcional;
+  - mantener `transcript_raw.txt` como artefacto derivado del resultado estructurado;
+  - extender `metadata.json` v2 de forma aditiva con un bloque opcional de trazabilidad de transcripción;
+  - persistir en metadata el provider efectivo, modelo efectivo, idioma solicitado, idioma detectado y timestamp de finalización;
+  - rechazar como transcripción válida cualquier resultado con texto pero sin segmentos útiles;
+  - asegurar que un fallo de serialización o persistencia deje la etapa `transcribe` en `failed`, sin falso `completed`.
+- Restricciones cerradas del WI:
+  - no introducir `schema_version` v3 en este sprint;
+  - no agregar diarización ni word-level alignment;
+  - no duplicar el transcript completo en logs ni metadata.
+- Cierre esperado del WI:
+  - `clean` y `report` pueden consumir un contrato estructurado, sin reparsear texto libre;
+  - la metadata previa del sprint anterior sigue siendo legible y reutilizable.
 
 #### WI-04-02 - Implementar `FasterWhisperProvider` y feature gating
 
@@ -756,6 +773,22 @@ Scenario: Ejecutar transcribe sin extra instalada
   - integración con monkeypatch simulando proveedor instalado/no instalado.
 - Criterio de aceptación:
   - `faster-whisper` queda enchufado sin meter lógica del modelo en CLI.
+- Tareas técnicas del WI:
+  - implementar el adaptador `FasterWhisperProvider` con import lazy de la dependencia opcional;
+  - resolver el modelo efectivo a partir de `MEDIA_REPORT_WHISPER_MODEL`, con override explícito por invocación;
+  - mapear la salida del proveedor real al contrato `TranscriptionResult` sin filtrar tipos propios del SDK hacia dominio o aplicación;
+  - encapsular en infraestructura la normalización de idioma detectado, tiempos y `confidence`;
+  - introducir errores tipados para dependencia opcional ausente, modelo inválido, ejecución fallida y salida inconsistente;
+  - producir mensajes accionables desde CLI y `doctor`, evitando stack trace innecesario;
+  - registrar provider, modelo y duración en `pipeline.log`, sin loggear contenido del transcript;
+  - actualizar `doctor` para reportar si la capacidad de transcripción está disponible y cómo habilitarla.
+- Restricciones cerradas del WI:
+  - solo `faster-whisper` entra en Sprint 04 como provider real;
+  - no descargar modelos automáticamente desde la CLI;
+  - no validar modelos concretos en `doctor`, solo disponibilidad de la feature opcional.
+- Cierre esperado del WI:
+  - el port queda realmente implementado y seleccionable;
+  - la ausencia de la extra `transcription` falla de forma clara, estable y documentada.
 
 #### WI-04-03 - Exponer `media-report transcribe`
 
@@ -798,6 +831,68 @@ Scenario: Transcribir archivo fuente desde comando dedicado
   - tests de compatibilidad con `process --only-transcribe`.
 - Criterio de aceptación:
   - `transcribe` es el contrato público recomendado para esta etapa y `process` queda como orquestador amplio.
+- Tareas técnicas del WI:
+  - crear un caso de uso compartido de aplicación para transcripción y reutilizarlo desde `transcribe`, `process` y `process --only-transcribe`;
+  - aceptar como entrada pública un único archivo fuente o un único artifact directory por invocación;
+  - si la entrada es media file, crear o reutilizar el sibling artifact root y reconstruir `extract_audio` y `normalize_audio` si faltan;
+  - si la entrada es artifact directory, validar metadata, resolver el source original y reparar prerequisitos cuando todavía sea posible;
+  - reutilizar por defecto una transcripción completada y válida;
+  - agregar `--overwrite` en `transcribe` con semántica acotada a reejecutar la etapa `transcribe`, sin overwrite destructivo global;
+  - mantener `process --overwrite` como alias deprecado de `--resume`;
+  - hacer que `media-report process PATH` ejecute por defecto hasta `transcribe`, dejando `report` y `pdf` planificados;
+  - hacer que `process --only-transcribe` ejecute transcripción real y comparta lógica funcional con el comando dedicado;
+  - actualizar help text y README con instalación de la extra `[transcription]`, ejemplos de `transcribe` y diferencias con `process`.
+- Restricciones cerradas del WI:
+  - sin batch ni `--recursive` en `transcribe` durante Sprint 04;
+  - sin generación de reportes ni limpieza semántica;
+  - sin divergencia funcional entre `transcribe` y `process --only-transcribe`.
+- Cierre esperado del WI:
+  - `transcribe` opera tanto sobre fuente nueva como sobre artifact root reusable;
+  - `process` sigue siendo el orquestador amplio, pero ya no se detiene antes de transcripción.
+
+- Resultado esperado:
+  - el pipeline ejecuta `transcribe` de forma real y persistente;
+  - `process` avanza por defecto hasta `transcribe`;
+  - existe un comando público dedicado y reutilizable para esta etapa.
+- Tareas transversales:
+  - mantener `metadata.json` en versión 2 con evolución aditiva;
+  - preservar la separación hexagonal entre CLI, aplicación, dominio e infraestructura;
+  - asegurar mensajes de error accionables y sin exposición de secretos;
+  - alinear README, help text y `doctor` con la nueva superficie pública;
+  - mantener la suite con dependencias pesadas mockeadas.
+- Dependencias internas:
+  - reutilizar `ArtifactPlanner`, `ArtifactRootValidator`, `PipelineStatePlanner`, `JsonPipelineMetadataRepository` y `FileSystemMediaScanner`;
+  - aprovechar la semántica ya existente de artifact root y reanudación por etapas;
+  - usar `MEDIA_REPORT_WHISPER_MODEL` como default de configuración sin romper el contrato actual de settings.
+- Riesgos técnicos concretos:
+  - inconsistencia entre `transcript_raw.txt` y `transcript_segments.json` si se persisten por caminos distintos;
+  - regresión de compatibilidad si se rompe la lectura de metadata v2 previa;
+  - deriva semántica entre `transcribe` y `process --only-transcribe` si no comparten el mismo caso de uso;
+  - falso positivo de `completed` cuando existan archivos parciales o un provider devuelva segmentos vacíos;
+  - fragilidad de pruebas si la suite se acopla al SDK real o a modelos descargados.
+- Decisiones cerradas para el sprint:
+  - provider único del sprint: `faster-whisper`;
+  - formato temporal estable: segundos `float`;
+  - `confidence` opcional por segmento;
+  - conservar `requested_language` y `detected_language`;
+  - reutilizar por defecto una transcripción válida y usar `--overwrite` solo para forzar esa etapa;
+  - `transcribe` acepta media file o artifact directory, pero no batch;
+  - `process` por defecto ejecuta hasta `transcribe`.
+- Cambios importantes de interfaces y tipos:
+  - `TranscriptionProvider` deja de devolver `str` y pasa a devolver un resultado estructurado;
+  - `PipelineMetadata` conserva versión 2, pero suma trazabilidad opcional específica de transcripción;
+  - aparece un caso de uso compartido de transcripción reutilizable desde más de un comando;
+  - la CLI pública suma `media-report transcribe` y extiende la semántica efectiva de `process`.
+- Escenarios de prueba de referencia:
+  - transcribir un `audio_normalized.wav` nominal y persistir texto más segmentos;
+  - transcribir un archivo fuente creando el artifact root cuando aún no existe;
+  - reusar una transcripción completada y válida sin reejecutar el provider;
+  - forzar `transcribe --overwrite` y refrescar solo los artefactos de transcripción;
+  - reparar un artifact root donde falta `audio_normalized.wav` pero el source original aún existe;
+  - fallar con mensaje claro cuando falta la extra `transcription`;
+  - fallar cuando el provider devuelve texto sin segmentos útiles;
+  - validar compatibilidad funcional entre `transcribe` y `process --only-transcribe`;
+  - verificar que `process` por defecto deja `report` y `pdf` planificados tras completar `transcribe`.
 
 ## Epic 05: Fase 5
 
