@@ -674,6 +674,9 @@ Scenario: Procesar archivo y detenerse antes de transcribir
 
 #### WI-04-01 - Expandir `TranscriptionProvider` para salida estructurada
 
+- Estado: hecho
+- Cerrado en: `2026-05-31T01:17:39-05:00`
+
 - Objetivo: hacer que el port devuelva suficiente información para reporting y limpieza futura.
 - Contexto técnico: hoy `TranscriptionProvider.transcribe()` devuelve solo `str`.
 - Alcance funcional:
@@ -732,6 +735,14 @@ Scenario: Transcribir audio normalizado
 - Cierre esperado del WI:
   - `clean` y `report` pueden consumir un contrato estructurado, sin reparsear texto libre;
   - la metadata previa del sprint anterior sigue siendo legible y reutilizable.
+- Resultado implementado:
+  - `TranscriptionProvider` dejó de depender de `str` y ahora exige `TranscriptionRequest` y `TranscriptionResult` como contrato explícito del dominio;
+  - el dominio de transcripción quedó modelado con `TranscriptionSegment`, soporte de `confidence` opcional y derivación determinista de `raw_text` a partir de segmentos;
+  - `transcript_segments.json` quedó formalizado con raíz tipo objeto y campos `provider`, `model`, `requested_language`, `detected_language` y `segments`;
+  - `transcript_raw.txt` quedó alineado como artefacto derivado de `segments`, unido por saltos de línea;
+  - `PipelineMetadata` v2 ahora soporta un bloque top-level opcional `transcription` con provider, modelo, idiomas, duración y `completed_at`, sin romper compatibilidad de lectura con metadata previa;
+  - `ArtifactRootValidator` ya rechaza una etapa `transcribe` marcada como `completed` cuando `transcript_segments.json` no cumple el contrato estructurado o diverge de `transcript_raw.txt`;
+  - la cobertura de pruebas valida serialización de entidades, round-trip de metadata con y sin bloque `transcription`, rechazo del formato legacy `[]` y compatibilidad de la suite existente con el nuevo contrato.
 
 #### WI-04-02 - Implementar `FasterWhisperProvider` y feature gating
 
