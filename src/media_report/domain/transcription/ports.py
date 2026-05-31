@@ -1,9 +1,13 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Protocol
+
+from media_report.domain.transcription.entities import (
+    TranscriptionRequest,
+    TranscriptionResult,
+)
 
 
 class TranscriptionProvider(Protocol):
-    def transcribe(self, audio_path: Path) -> str:
+    def transcribe(self, request: TranscriptionRequest) -> TranscriptionResult:
         """Transcribe an audio file."""

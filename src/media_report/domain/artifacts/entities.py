@@ -206,6 +206,37 @@ class PipelineWorkflowMetadata:
 
 
 @dataclass(frozen=True)
+class PipelineTranscriptionMetadata:
+    provider: str
+    model: str
+    requested_language: str | None
+    detected_language: str | None
+    duration_ms: int
+    completed_at: str
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "provider": self.provider,
+            "model": self.model,
+            "requested_language": self.requested_language,
+            "detected_language": self.detected_language,
+            "duration_ms": self.duration_ms,
+            "completed_at": self.completed_at,
+        }
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any]) -> PipelineTranscriptionMetadata:
+        return cls(
+            provider=str(payload["provider"]),
+            model=str(payload["model"]),
+            requested_language=payload.get("requested_language"),
+            detected_language=payload.get("detected_language"),
+            duration_ms=int(payload["duration_ms"]),
+            completed_at=str(payload["completed_at"]),
+        )
+
+
+@dataclass(frozen=True)
 class PipelineMetadata:
     schema_version: int
     generated_at: str
@@ -213,6 +244,7 @@ class PipelineMetadata:
     artifacts: PipelineArtifactMetadata
     workflow: PipelineWorkflowMetadata
     stages: dict[PipelineStage, PipelineStageMetadata]
+    transcription: PipelineTranscriptionMetadata | None = None
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -225,6 +257,7 @@ class PipelineMetadata:
                 stage.value: metadata.to_payload()
                 for stage, metadata in self.stages.items()
             },
+            "transcription": self.transcription.to_payload() if self.transcription else None,
         }
 
     @classmethod
@@ -243,4 +276,9 @@ class PipelineMetadata:
                 PipelineStage(stage): PipelineStageMetadata.from_payload(metadata)
                 for stage, metadata in payload["stages"].items()
             },
+            transcription=(
+                PipelineTranscriptionMetadata.from_payload(payload["transcription"])
+                if payload.get("transcription")
+                else None
+            ),
         )

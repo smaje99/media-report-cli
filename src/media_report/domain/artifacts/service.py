@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,11 +20,13 @@ from media_report.domain.artifacts.entities import (
     PipelineStageDecision,
     PipelineStageMetadata,
     PipelineStageStatus,
+    PipelineTranscriptionMetadata,
     PipelineWorkflowMetadata,
     StageDecision,
     StageErrorSummary,
 )
 from media_report.domain.media.entities import MediaSource
+from media_report.domain.transcription.entities import TranscriptionResult
 
 
 class ArtifactPlanner:
@@ -223,6 +226,25 @@ class ArtifactPlanner:
         )
         return replace(metadata, stages={**metadata.stages, stage: updated_stage})
 
+    def record_transcription(
+        self,
+        metadata: PipelineMetadata,
+        *,
+        result: TranscriptionResult,
+        completed_at: str | None = None,
+    ) -> PipelineMetadata:
+        return replace(
+            metadata,
+            transcription=PipelineTranscriptionMetadata(
+                provider=result.provider,
+                model=result.model,
+                requested_language=result.requested_language,
+                detected_language=result.detected_language,
+                duration_ms=result.duration_ms,
+                completed_at=completed_at or self._now(),
+            ),
+        )
+
     @staticmethod
     def _build_workflow_metadata(
         *,
@@ -324,6 +346,31 @@ class ArtifactRootValidator:
                     "required artifacts are missing: "
                     f"{missing_names}."
                 )
+            if stage == PipelineStage.TRANSCRIBE:
+                self._validate_transcription_outputs(artifact_plan=artifact_plan)
+
+    def _validate_transcription_outputs(self, *, artifact_plan: ArtifactPlan) -> None:
+        try:
+            payload = json.loads(artifact_plan.transcript_segments.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ArtifactMetadataError(
+                "Stage 'transcribe' is marked completed but "
+                "'transcript_segments.json' is not valid JSON."
+            ) from exc
+
+        try:
+            result = TranscriptionResult.from_artifact_payload(payload)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ArtifactMetadataError(
+                "Stage 'transcribe' is marked completed but "
+                "'transcript_segments.json' does not match the structured contract."
+            ) from exc
+
+        raw_text = artifact_plan.transcript_raw.read_text(encoding="utf-8").strip()
+        if raw_text != result.raw_text.strip():
+            raise ArtifactMetadataError(
+                "Stage 'transcribe' is marked completed but transcript artifacts are inconsistent."
+            )
 
     @staticmethod
     def outputs_for_stage(
