@@ -821,6 +821,7 @@ Scenario: Ejecutar transcribe sin extra instalada
   - aceptar archivo de media o artifact directory;
   - reusar extracción/normalización si faltan;
   - permitir `--language`, `--model` y `--overwrite` de forma aditiva.
+  - preferir ejecución acelerada por GPU para transcripción cuando el runtime disponible lo soporte, con fallback explícito a CPU.
 - No se tocará:
   - generación de reportes;
   - limpieza de texto;
@@ -849,6 +850,7 @@ Scenario: Transcribir archivo fuente desde comando dedicado
 - Observabilidad/logging:
   - registrar fuente de entrada y artifact root;
   - etapas ejecutadas vs reutilizadas.
+  - registrar si la transcripción corrió con GPU o CPU y si hubo fallback.
 - Pruebas unitarias/integración:
   - integración de CLI para archivo único y artifact directory;
   - tests de compatibilidad con `process --only-transcribe`.
@@ -864,11 +866,14 @@ Scenario: Transcribir archivo fuente desde comando dedicado
   - mantener `process --overwrite` como alias deprecado de `--resume`;
   - hacer que `media-report process PATH` ejecute por defecto hasta `transcribe`, dejando `report` y `pdf` planificados;
   - hacer que `process --only-transcribe` ejecute transcripción real y comparta lógica funcional con el comando dedicado;
+  - seleccionar dispositivo de ejecución con preferencia por GPU cuando el provider o runtime lo permita, sin meter heurística de hardware en la CLI;
+  - persistir en metadata y `pipeline.log` el dispositivo efectivo o el motivo del fallback a CPU;
   - actualizar help text y README con instalación de la extra `[transcription]`, ejemplos de `transcribe` y diferencias con `process`.
 - Restricciones cerradas del WI:
   - sin batch ni `--recursive` en `transcribe` durante Sprint 04;
   - sin generación de reportes ni limpieza semántica;
   - sin divergencia funcional entre `transcribe` y `process --only-transcribe`.
+  - sin requerir GPU dedicada para que la etapa sea considerada soportada.
 - Cierre esperado del WI:
   - `transcribe` opera tanto sobre fuente nueva como sobre artifact root reusable;
   - `process` sigue siendo el orquestador amplio, pero ya no se detiene antes de transcripción.
@@ -893,6 +898,7 @@ Scenario: Transcribir archivo fuente desde comando dedicado
   - deriva semántica entre `transcribe` y `process --only-transcribe` si no comparten el mismo caso de uso;
   - falso positivo de `completed` cuando existan archivos parciales o un provider devuelva segmentos vacíos;
   - fragilidad de pruebas si la suite se acopla al SDK real o a modelos descargados.
+  - detección frágil del dispositivo si la preferencia por GPU queda mezclada con detalles del SDK.
 - Decisiones cerradas para el sprint:
   - provider único del sprint: `faster-whisper`;
   - formato temporal estable: segundos `float`;
@@ -901,6 +907,7 @@ Scenario: Transcribir archivo fuente desde comando dedicado
   - reutilizar por defecto una transcripción válida y usar `--overwrite` solo para forzar esa etapa;
   - `transcribe` acepta media file o artifact directory, pero no batch;
   - `process` por defecto ejecuta hasta `transcribe`.
+  - cuando el runtime lo permita, `transcribe` y `process` preferirán GPU antes que CPU para inferencia local.
 - Cambios importantes de interfaces y tipos:
   - `TranscriptionProvider` deja de devolver `str` y pasa a devolver un resultado estructurado;
   - `PipelineMetadata` conserva versión 2, pero suma trazabilidad opcional específica de transcripción;
@@ -926,6 +933,7 @@ Scenario: Transcribir archivo fuente desde comando dedicado
   - renderizado de prompt desde recursos empaquetados;
   - integración Ollama y OpenAI-compatible;
   - comando `report`.
+  - preferencia por GPU en providers locales cuando la runtime la soporte.
 - Fuera de alcance:
   - PDF;
   - limpieza semántica avanzada si compite con el sprint;
@@ -939,6 +947,7 @@ Scenario: Transcribir archivo fuente desde comando dedicado
   - template context insuficiente;
   - respuestas LLM no estructuradas;
   - fuga accidental de secretos o headers.
+  - comportamiento opaco del runtime local si usa CPU pese a existir GPU y eso no queda trazado.
 - Criterio de salida:
   - un transcripto válido puede convertirse en `report.md` desde CLI y también desde `process`.
 
@@ -1038,6 +1047,7 @@ Scenario: Generar reporte con proveedor remoto
   - aceptar artifact directory como input principal;
   - permitir override de provider, model, template y output format;
   - reutilizar desde `process --only-report`.
+  - preferir GPU en providers locales compatibles sin cambiar el contrato del comando.
 - No se tocará:
   - render PDF;
   - limpieza avanzada del transcripto;
@@ -1066,11 +1076,13 @@ Scenario: Regenerar reporte desde artefactos existentes
 - Observabilidad/logging:
   - registrar inputs del reporte y etapas omitidas;
   - log separado de prompt y respuesta cruda.
+  - registrar provider, modelo y dispositivo efectivo cuando el runtime lo exponga.
 - Pruebas unitarias/integración:
   - integración CLI sobre artifact directory válido e inválido;
   - tests de compatibilidad con `process --only-report`.
 - Criterio de aceptación:
   - el usuario puede regenerar reportes de forma aislada y trazable.
+  - si existe aceleración por GPU disponible en el runtime local, el flujo la prefiere sin romper el fallback a CPU.
 
 ## Epic 06: Fase 6
 
@@ -1081,6 +1093,7 @@ Scenario: Regenerar reporte desde artefactos existentes
   - `DocumentRenderer` real con Pandoc y plantilla TeX empaquetada;
   - orquestación completa de `process`;
   - manejo de fallos parciales preservando Markdown.
+  - mantener trazabilidad del dispositivo efectivo en etapas de inferencia reutilizadas por `process`.
 - Fuera de alcance:
   - QA visual profunda de PDF;
   - múltiples engines PDF configurables más allá del mínimo razonable;
@@ -1094,6 +1107,7 @@ Scenario: Regenerar reporte desde artefactos existentes
   - presencia de `pandoc` y `xelatex/lualatex`;
   - diferencias tipográficas por plataforma;
   - pipeline largo y frágil si la orquestación no queda limpia.
+  - inconsistencias de observabilidad si `process` resume etapas hechas con distinto dispositivo sin dejar rastro.
 - Criterio de salida:
   - `process` produce `report.md` y `report.pdf`, o deja trazabilidad clara si PDF falla.
 
@@ -1147,6 +1161,7 @@ Scenario: Renderizar PDF desde Markdown existente
   - ejecutar descubrimiento, audio, transcripción, reporting y PDF;
   - reutilizar los mismos casos de uso de `transcribe` y `report`;
   - respetar `--only-transcribe` y `--only-report` como compatibilidad aditiva.
+  - mantener preferencia por GPU en transcripción y providers locales de reporte cuando aplique.
 - No se tocará:
   - daemonización;
   - colas de trabajo;
@@ -1175,6 +1190,7 @@ Scenario: Ejecutar pipeline completo para archivo único
 - Observabilidad/logging:
   - resumen por etapa y por archivo;
   - señal clara de fallo parcial versus total.
+  - visibilidad del dispositivo efectivo por etapa cuando la información esté disponible.
 - Pruebas unitarias/integración:
   - integración CLI con doubles de todas las etapas;
   - casos de fallo parcial preservando artefactos previos.

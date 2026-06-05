@@ -124,6 +124,10 @@ Optional Python dependencies:
 
 - `faster-whisper` via the `transcription` extra
 
+For local inference stages, the intended direction is to prefer GPU-backed execution when the
+selected provider supports it, while keeping CPU fallback available for supported Linux and macOS
+installs.
+
 `media-report doctor` reports whether the optional transcription capability is available and
 shows the install hint when it is not.
 

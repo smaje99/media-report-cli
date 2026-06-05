@@ -19,10 +19,12 @@ FFmpeg extraction and normalization adapter.
 ## Phase 4
 
 Transcription pipeline with `faster-whisper` behind the `TranscriptionProvider` port.
+Prefer GPU-backed inference when available, with CPU fallback preserved.
 
 ## Phase 5
 
 Prompt rendering and LLM-backed Markdown report generation.
+Preserve the same GPU-first preference for local inference runtimes such as Ollama.
 
 ## Phase 6
 

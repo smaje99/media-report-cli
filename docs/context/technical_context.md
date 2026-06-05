@@ -17,6 +17,13 @@
 
 These remain external system dependencies rather than bundled Python dependencies.
 
+## Compute Strategy
+
+- Prefer GPU-backed execution for local inference workloads when the provider supports it.
+- Keep CPU fallback mandatory for transcription and local LLM flows so the CLI still works on machines without usable GPU acceleration.
+- Treat compute-device selection as an infrastructure and application concern, not a CLI-only shortcut.
+- See [compute_context.md](./compute_context.md) for the cross-stage policy.
+
 ## Packaging
 
 - `src/` layout
