@@ -120,3 +120,15 @@ class TranscriptionOutputError(MediaReportError):
 
 class TranscriptionPersistenceError(MediaReportError):
     """Raised when transcription artifacts cannot be persisted safely."""
+
+
+class PromptRenderPrerequisiteError(MediaReportError):
+    """Raised when reporting prompt rendering prerequisites are missing or invalid."""
+
+
+class PromptRenderOutputError(MediaReportError):
+    """Raised when a rendered prompt is empty or otherwise unusable."""
+
+
+class PromptRenderPersistenceError(MediaReportError):
+    """Raised when prompt rendering artifacts cannot be persisted safely."""
