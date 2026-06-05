@@ -966,6 +966,54 @@ Scenario: Transcribir archivo fuente desde comando dedicado
   - comportamiento opaco del runtime local si usa CPU pese a existir GPU y eso no queda trazado.
 - Criterio de salida:
   - un transcripto válido puede convertirse en `report.md` desde CLI y también desde `process`.
+- Tareas transversales:
+  - mantener `metadata.json` en versión 2 con evolución aditiva;
+  - preservar la separación hexagonal entre CLI, aplicación, dominio e infraestructura;
+  - asegurar que `report` y `process --only-report` compartan el mismo caso de uso;
+  - persistir siempre `prompt_used.md`, `llm_response_raw.txt` y `report.md` como artefactos trazables;
+  - garantizar redacción de secretos en consola, logs, metadata y errores;
+  - emitir warning visible cuando el proveedor efectivo no sea local;
+  - documentar help text y README solo cuando cambie la superficie pública del comando.
+- Dependencias internas:
+  - reutilizar `ArtifactPlanner`, `ArtifactRootValidator`, `PipelineStatePlanner` y `JsonPipelineMetadataRepository`;
+  - reutilizar `PromptTemplateRepository` y `PackagePromptTemplateRepository` para carga por `importlib.resources`;
+  - extender el contrato `LLMProvider` sin filtrar detalles HTTP de infraestructura hacia dominio o aplicación;
+  - consumir `transcript_raw.txt` y `transcript_segments.json` como prerequisitos cerrados por Sprint 04;
+  - usar los campos actuales de `workflow.template_name`, `workflow.llm_provider`, `workflow.llm_model` y `workflow.output_format`.
+- Riesgos técnicos concretos:
+  - marcar `report` como `completed` si falta alguno de los tres artefactos obligatorios;
+  - divergencia funcional entre `media-report report` y `process --only-report`;
+  - acoplar render de prompts a rutas del repositorio en lugar de recursos empaquetados;
+  - persistir o loggear prompt/respuesta sin distinguir entre trazabilidad en artefactos y ruido en consola;
+  - filtrar `MEDIA_REPORT_OPENAI_API_KEY`, headers `Authorization` o query params sensibles en errores HTTP;
+  - aceptar respuestas LLM vacías o no Markdown como reportes válidos;
+  - hacer la suite frágil al depender de Ollama real o de APIs remotas.
+- Decisiones cerradas para el sprint:
+  - sin cambio de `schema_version`; se conserva `metadata.json` v2;
+  - providers reales del sprint: `ollama` y `openai-compatible`;
+  - proveedor por defecto: `ollama`;
+  - cualquier proveedor distinto de `ollama` requiere warning visible de procesamiento remoto;
+  - no se implementa streaming público ni retries sofisticados;
+  - `--overwrite` en `report` reejecuta solo la etapa `report`, no borra artefactos upstream;
+  - `process --only-report` requiere `--resume` o artifact root reusable con transcripción válida;
+  - PDF permanece planificado para Sprint 06.
+- Cambios importantes de interfaces y tipos:
+  - `LLMProvider` pasa de contrato mínimo de texto a contrato operativo con request/result tipados o equivalente;
+  - aparece un caso de uso de aplicación para reporting reutilizable desde CLI y `process`;
+  - `PipelineMetadata` conserva versión 2, pero puede sumar trazabilidad opcional de reporting;
+  - el validador de artifact root debe reconocer `prompt_used.md`, `llm_response_raw.txt` y `report.md` como outputs obligatorios de `report`;
+  - la CLI pública suma `media-report report` sin renombrar comandos existentes.
+- Escenarios de prueba de referencia:
+  - renderizar prompt determinista desde `transcript_raw.txt` y template `meeting`;
+  - fallar con template inexistente sin marcar `report` como `completed`;
+  - fallar cuando el artifact root no tiene transcripción válida;
+  - generar `llm_response_raw.txt` y `report.md` con provider Ollama mockeado;
+  - generar reporte con provider remoto mostrando warning y sin imprimir API key;
+  - fallar por timeout o HTTP error con mensaje redactado;
+  - reutilizar reporte completado cuando no se solicita `--overwrite`;
+  - reejecutar solo `report` con `--overwrite` preservando transcriptos;
+  - validar compatibilidad funcional entre `media-report report` y `process --only-report`;
+  - verificar que ninguna prueba depende de rutas relativas del repo ni de servicios externos reales.
 
 #### WI-05-01 - Servicio de render de prompt y contexto de reporte
 
@@ -983,7 +1031,7 @@ Scenario: Transcribir archivo fuente desde comando dedicado
   - `report` acepta `--template`;
   - `metadata.json` guarda template efectivo y quizá hash de prompt;
   - `prompt_used.md` se vuelve artefacto obligatorio de reporting.
-- Gherkin mínimo:
+- Gherkin ampliado:
 
 ```gherkin
 Scenario: Generar prompt para template meeting
@@ -991,6 +1039,26 @@ Scenario: Generar prompt para template meeting
   When ejecuto la etapa de reporting con "--template meeting"
   Then se persiste "prompt_used.md"
   And el prompt incorpora el contenido del transcripto y el contexto del archivo
+
+Scenario: Rechazar template inexistente sin completar report
+  Given un artifact directory con transcripción completada
+  When ejecuto la etapa de reporting con "--template inexistente"
+  Then el comando falla con un mensaje accionable
+  And no se marca la etapa "report" como completada
+  And no se sobrescribe un "prompt_used.md" previo válido
+
+Scenario: Bloquear reporting con transcripto vacío
+  Given un artifact directory con "transcript_raw.txt" vacío
+  When ejecuto la etapa de render de prompt
+  Then la etapa "report" queda en estado "failed"
+  And el error indica que la transcripción no es utilizable
+  And no se llama al proveedor LLM
+
+Scenario: Cargar template desde paquete instalado
+  Given la aplicación se ejecuta desde una instalación empaquetada
+  When renderizo el prompt con "--template technical_report"
+  Then la template se carga mediante recursos del paquete
+  And no se requiere una ruta relativa del repositorio
 ```
 
 - Happy path:
@@ -1009,6 +1077,78 @@ Scenario: Generar prompt para template meeting
   - integración `templates list` y `report` con template válida/inválida.
 - Criterio de aceptación:
   - cualquier reporte puede auditar qué prompt exacto se usó.
+- Desglose de tareas:
+  - Arquitectura:
+    - definir un modelo de contexto de reporte con source, artifact root, workflow, transcripción y template efectivo;
+    - crear un servicio de render de prompt en aplicación o dominio sin dependencias HTTP;
+    - mantener la carga de templates detrás de `PromptTemplateRepository`;
+    - evitar que CLI lea archivos de transcripción o recursos empaquetados directamente;
+    - preparar el resultado del render para ser consumido por el futuro caso de uso de reporting.
+  - Negocio/valor:
+    - asegurar que cualquier reporte pueda ser auditado desde el prompt exacto usado;
+    - permitir iterar plantillas sin rehacer transcripción ni normalización;
+    - preservar trazabilidad para reuniones, entrevistas, clases y reportes técnicos.
+  - Funcional:
+    - leer `transcript_raw.txt` como contenido principal del prompt;
+    - validar que `transcript_segments.json` sigue siendo consistente con el transcripto crudo;
+    - incorporar en el prompt contexto mínimo del archivo fuente, template, idioma y metadata disponible;
+    - persistir `prompt_used.md` en el artifact root;
+    - calcular y persistir en metadata un hash o tamaño del prompt si se decide como dato de trazabilidad;
+    - rechazar templates desconocidas antes de llamar al proveedor LLM;
+    - rechazar transcriptos vacíos, inexistentes o inconsistentes.
+  - No funcional:
+    - cargar recursos exclusivamente mediante `importlib.resources`;
+    - no imprimir el prompt completo en consola;
+    - registrar template, tamaño y hash del prompt en `pipeline.log`;
+    - mantener comportamiento determinista para el mismo transcripto, template y contexto;
+    - evitar dependencias de red en esta WI.
+  - Pruebas:
+    - añadir unit tests de render determinista;
+    - añadir tests de template válida, template inexistente y lista de templates empaquetadas;
+    - añadir tests de transcripto vacío y artefactos inconsistentes;
+    - añadir test que pruebe que el repository de templates abstrae la carga de recursos;
+    - añadir integración mínima de `report` con provider fake solo hasta persistencia de `prompt_used.md` si el comando ya existe en la WI correspondiente.
+  - Documentación/aceptación:
+    - documentar que `prompt_used.md` es artefacto obligatorio de `report`;
+    - dejar claro que el prompt persistido es la fuente de auditoría, no la salida de consola;
+    - actualizar ayuda del comando cuando `--template` quede operativo.
+- Checklist de implementación:
+  - [ ] Existe un modelo explícito de contexto de reporte.
+  - [ ] El render de prompt no importa infraestructura HTTP ni CLI.
+  - [ ] `PromptTemplateRepository` sigue siendo el punto único de carga de templates.
+  - [ ] `prompt_used.md` se escribe antes de invocar el provider LLM.
+  - [ ] La metadata registra template efectivo y trazabilidad mínima del prompt.
+  - [ ] Template inexistente falla antes de tocar providers.
+  - [ ] Transcripto vacío o inconsistente deja `report` en `failed`.
+  - [ ] No se imprime el prompt completo en consola.
+  - [ ] Las pruebas no dependen de rutas del repositorio.
+  - [ ] Si solo existe el render pero no se actualiza metadata, el WI se considera parcialmente implementado.
+- Preguntas de definición y cierre:
+  - Arquitectura:
+    - [ ] ¿El render de prompt vive en aplicación sin conocer Typer ni HTTP?
+    - [ ] ¿El contexto de reporte es suficientemente estable para `report` y `process --only-report`?
+    - [ ] ¿Se evitó introducir una abstracción especulativa fuera de la presión real del sprint?
+  - Negocio:
+    - [ ] ¿El prompt persistido permite explicar cómo se generó el reporte ante una auditoría?
+    - [ ] ¿Las plantillas soportadas cubren los usos `generic`, `meeting`, `interview`, `technical_report` y `class_notes`?
+  - Funcional:
+    - [ ] ¿Qué ocurre si `transcript_raw.txt` existe pero `transcript_segments.json` no cumple contrato?
+    - [ ] ¿El usuario puede cambiar template sin rehacer transcripción?
+    - [ ] ¿El render es determinista para los mismos inputs?
+  - No funcional:
+    - [ ] ¿Hay límite, medición o advertencia para prompts excesivos?
+    - [ ] ¿La salida de consola evita volcar contenido sensible del transcripto?
+    - [ ] ¿La carga funciona desde wheel/sdist instalado?
+  - Pruebas:
+    - [ ] ¿Hay tests unitarios de render y validación de prerequisitos?
+    - [ ] ¿Hay tests de recurso empaquetado sin path relativo?
+    - [ ] ¿Hay cobertura para estados parciales de metadata?
+  - Documentación:
+    - [ ] ¿La ayuda de `report --template` comunica templates válidas o el camino para listarlas?
+    - [ ] ¿El backlog deja claro que PDF no entra en esta WI?
+  - Aceptación/cerrado:
+    - [ ] ¿Se puede inspeccionar `prompt_used.md` y reproducir el prompt exacto?
+    - [ ] ¿Un fallo de render no deja `report` como completado?
 
 #### WI-05-02 - Implementar providers LLM reales y redacción de secretos
 
@@ -1026,15 +1166,37 @@ Scenario: Generar prompt para template meeting
   - `MEDIA_REPORT_OPENAI_API_KEY` y base URLs usados de forma real;
   - `doctor` puede detectar configuración incompleta;
   - errores con provider/model sin imprimir tokens.
-- Gherkin mínimo:
+- Gherkin ampliado:
 
 ```gherkin
+Scenario: Generar respuesta con Ollama local
+  Given una configuración con proveedor "ollama"
+  And un prompt persistido en "prompt_used.md"
+  When ejecuto la generación LLM con el modelo configurado
+  Then se llama al endpoint local de Ollama
+  And se persiste "llm_response_raw.txt"
+  And la metadata registra provider y modelo efectivos
+
 Scenario: Generar reporte con proveedor remoto
   Given una configuración "openai-compatible" válida
   When ejecuto "media-report report artefactos --provider openai-compatible"
   Then veo un warning sobre procesamiento remoto
   And se genera "llm_response_raw.txt"
   And nunca se imprime la API key
+
+Scenario: Fallar con API key ausente sin filtrar secretos
+  Given una configuración "openai-compatible" sin API key
+  When ejecuto la generación LLM remota
+  Then el comando falla con un mensaje accionable
+  And la etapa "report" queda en estado "failed"
+  And la salida no contiene valores de variables secretas
+
+Scenario: Rechazar respuesta vacía del proveedor
+  Given un proveedor LLM que devuelve una respuesta vacía
+  When ejecuto la generación de reporte
+  Then se persiste el fallo en metadata
+  And no se genera "report.md" como reporte válido
+  And "llm_response_raw.txt" conserva la respuesta cruda si existe
 ```
 
 - Happy path:
@@ -1054,6 +1216,80 @@ Scenario: Generar reporte con proveedor remoto
   - integración CLI con proveedor fake local/remoto.
 - Criterio de aceptación:
   - reporting real funciona sin violar la política de secretos.
+- Desglose de tareas:
+  - Arquitectura:
+    - evolucionar `LLMProvider` para aceptar un request tipado o mantener una firma mínima con resultado enriquecido, pero sin exponer detalles HTTP;
+    - mantener `OllamaProvider` y `OpenAICompatibleProvider` dentro de infraestructura;
+    - encapsular base URL, headers, timeouts y parsing de respuestas en cada adaptador;
+    - centralizar redacción de secretos para errores, logs y representaciones de config;
+    - preparar factories en bootstrap para seleccionar provider explícitamente.
+  - Negocio/valor:
+    - habilitar reporting local por defecto para preservar privacidad;
+    - permitir provider remoto solo por elección explícita del usuario;
+    - mantener evidencia cruda de la respuesta para trazabilidad y depuración.
+  - Funcional:
+    - implementar llamada HTTP a Ollama usando `ollama_base_url` y modelo efectivo;
+    - implementar llamada OpenAI-compatible usando `openai_base_url`, `MEDIA_REPORT_OPENAI_API_KEY` y modelo efectivo;
+    - persistir la respuesta cruda en `llm_response_raw.txt`;
+    - validar respuesta vacía, error HTTP, timeout y payload inesperado;
+    - mapear errores de provider a errores tipados del proyecto;
+    - emitir warning cuando `llm_provider != "ollama"`;
+    - actualizar `doctor` para distinguir provider local disponible, remoto incompleto y config válida.
+  - No funcional:
+    - definir timeout razonable y configurable o constante explícita;
+    - no implementar streaming ni retries sofisticados en este sprint;
+    - registrar provider, modelo, latencia y estado HTTP resumido;
+    - redactar API keys, bearer tokens, headers sensibles y URLs con credenciales;
+    - mantener tests sin red real.
+  - Pruebas:
+    - añadir unit tests de Ollama con transporte HTTP mockeado;
+    - añadir unit tests de OpenAI-compatible con transporte HTTP mockeado;
+    - añadir tests de timeout, HTTP 4xx/5xx y payload inesperado;
+    - añadir tests de redacción de `MEDIA_REPORT_OPENAI_API_KEY` en excepciones y logs;
+    - añadir tests de `doctor` para provider remoto sin API key;
+    - añadir integración CLI con provider fake local y provider fake remoto.
+  - Documentación/aceptación:
+    - documentar variables `MEDIA_REPORT_OPENAI_API_KEY`, `MEDIA_REPORT_OPENAI_BASE_URL` y `MEDIA_REPORT_OLLAMA_BASE_URL`;
+    - documentar warning de procesamiento remoto;
+    - dejar claro que Ollama es el default local y que APIs remotas son opt-in.
+- Checklist de implementación:
+  - [ ] `OllamaProvider` deja de lanzar `NotImplementedError`.
+  - [ ] `OpenAICompatibleProvider` deja de lanzar `NotImplementedError`.
+  - [ ] Las llamadas HTTP quedan encapsuladas en infraestructura.
+  - [ ] La selección de provider se resuelve fuera de la CLI directa.
+  - [ ] `llm_response_raw.txt` se persiste para respuestas exitosas.
+  - [ ] Respuesta vacía o no utilizable no genera `report.md` válido.
+  - [ ] Provider remoto sin API key falla con mensaje accionable.
+  - [ ] Los errores HTTP no imprimen tokens ni headers sensibles.
+  - [ ] `doctor` refleja configuración LLM incompleta o disponible.
+  - [ ] La suite usa mocks/fakes y no llama servicios externos.
+  - [ ] Si el provider funciona pero no hay redacción de secretos, el WI queda incompleto.
+- Preguntas de definición y cierre:
+  - Arquitectura:
+    - [ ] ¿Los adaptadores HTTP no filtran tipos del SDK o cliente hacia dominio?
+    - [ ] ¿La factory de provider evita condicionales duplicados en comandos?
+    - [ ] ¿El contrato del port permite registrar latencia y modelo efectivo sin acoplarse a HTTP?
+  - Negocio:
+    - [ ] ¿El default local satisface la política de privacidad del producto?
+    - [ ] ¿El usuario recibe aviso inequívoco antes de usar un proveedor remoto?
+  - Funcional:
+    - [ ] ¿Qué payload exacto se acepta de Ollama?
+    - [ ] ¿Qué endpoint OpenAI-compatible se usa y cómo se extrae el contenido Markdown?
+    - [ ] ¿Qué ocurre si el modelo no existe o el endpoint está caído?
+  - No funcional:
+    - [ ] ¿El timeout evita comandos colgados indefinidamente?
+    - [ ] ¿Los logs son útiles sin contener prompt completo, transcriptos completos o secretos?
+    - [ ] ¿La redacción cubre config, errores, metadata y consola?
+  - Pruebas:
+    - [ ] ¿Hay tests de proveedor local, remoto, timeout y HTTP error?
+    - [ ] ¿Hay tests explícitos de no filtrado de API key?
+    - [ ] ¿Hay integración con provider fake para la CLI?
+  - Documentación:
+    - [ ] ¿Las variables de entorno están documentadas con precedencia frente al TOML?
+    - [ ] ¿La documentación explica el warning remoto?
+  - Aceptación/cerrado:
+    - [ ] ¿Puede generarse `llm_response_raw.txt` con ambos providers?
+    - [ ] ¿Ningún path de error imprime secretos?
 
 #### WI-05-03 - Exponer `media-report report`
 
@@ -1072,7 +1308,7 @@ Scenario: Generar reporte con proveedor remoto
   - nuevo comando `report`;
   - `process --only-report` pasa a ser compatibilidad sobre el mismo caso de uso;
   - README actualizado.
-- Gherkin mínimo:
+- Gherkin ampliado:
 
 ```gherkin
 Scenario: Regenerar reporte desde artefactos existentes
@@ -1080,6 +1316,27 @@ Scenario: Regenerar reporte desde artefactos existentes
   When ejecuto "media-report report ruta_al_artifact_dir --template technical_report"
   Then se genera o actualiza "report.md"
   And no se reejecuta transcripción
+
+Scenario: Ejecutar report desde process only-report
+  Given un artifact directory reusable con transcripción completada
+  When ejecuto "media-report process archivo.mp4 --resume --only-report"
+  Then se usa el mismo caso de uso que "media-report report"
+  And se generan "prompt_used.md", "llm_response_raw.txt" y "report.md"
+  And no se reejecutan extracción, normalización ni transcripción
+
+Scenario: Rechazar artifact directory sin transcripción válida
+  Given un artifact directory sin "transcript_segments.json"
+  When ejecuto "media-report report ruta_al_artifact_dir"
+  Then el comando falla con mensaje accionable
+  And la etapa "report" no queda marcada como completada
+  And no se llama al proveedor LLM
+
+Scenario: Sobrescribir solo la etapa report
+  Given un artifact directory con "report.md" existente y transcripción válida
+  When ejecuto "media-report report ruta_al_artifact_dir --overwrite"
+  Then se regeneran "prompt_used.md", "llm_response_raw.txt" y "report.md"
+  And se preservan "transcript_raw.txt" y "transcript_segments.json"
+  And no se ejecutan etapas upstream
 ```
 
 - Happy path:
@@ -1099,6 +1356,81 @@ Scenario: Regenerar reporte desde artefactos existentes
 - Criterio de aceptación:
   - el usuario puede regenerar reportes de forma aislada y trazable.
   - si existe aceleración por GPU disponible en el runtime local, el flujo la prefiere sin romper el fallback a CPU.
+- Desglose de tareas:
+  - Arquitectura:
+    - crear `ReportService` o caso de uso equivalente en `media_report.application`;
+    - reutilizar ese caso de uso desde `media-report report` y desde `ProcessMediaService` cuando se seleccione `report`;
+    - mantener CLI como capa de parsing, warnings y presentación;
+    - validar artifact root mediante `ArtifactRootValidator` antes de ejecutar reporting;
+    - inyectar `PromptTemplateRepository`, `LLMProvider` y repositorios de metadata/artefactos.
+  - Negocio/valor:
+    - permitir regenerar reportes sin rehacer transcripción costosa;
+    - soportar iteración rápida sobre template, provider y modelo;
+    - mantener el artifact root como unidad auditable de trabajo.
+  - Funcional:
+    - aceptar un artifact directory como input principal;
+    - resolver source original desde `metadata.json`;
+    - validar prerequisitos `transcript_raw.txt` y `transcript_segments.json`;
+    - renderizar prompt, invocar provider, persistir respuesta cruda y escribir `report.md`;
+    - marcar `report` como `running`, `completed` o `failed` con timestamps;
+    - reutilizar reporte completado y válido cuando no se solicita `--overwrite`;
+    - hacer que `--overwrite` fuerce solo la etapa `report`;
+    - mantener `pdf` como `planned` o `skipped` según selección, sin ejecutar Pandoc.
+  - No funcional:
+    - no reejecutar extracción, normalización ni transcripción desde `report`;
+    - emitir warning remoto antes o durante la ejecución cuando aplique;
+    - registrar provider, modelo, template, tamaño de prompt, tamaño de respuesta y duración;
+    - evitar stack traces para prerequisitos ausentes o provider mal configurado;
+    - preservar artefactos upstream ante cualquier fallo de reporting.
+  - Pruebas:
+    - añadir unit tests del caso de uso de reporting con providers fake;
+    - añadir tests de transición de metadata `planned -> running -> completed` y `planned -> running -> failed`;
+    - añadir integración CLI de `media-report report` con artifact directory válido;
+    - añadir integración CLI de artifact directory inválido o sin transcriptos;
+    - añadir tests de compatibilidad con `process --only-report --resume`;
+    - añadir tests de `--overwrite` limitado a artefactos de report.
+  - Documentación/aceptación:
+    - actualizar help text de `report` con `--template`, `--provider`, `--model` y `--overwrite`;
+    - documentar que `report` no procesa media files nuevos;
+    - documentar que `process --only-report` es compatibilidad sobre el mismo caso de uso.
+- Checklist de implementación:
+  - [ ] Existe un comando público `media-report report`.
+  - [ ] El comando acepta artifact directory, no archivo fuente como entrada principal.
+  - [ ] Existe un caso de uso compartido para reporting.
+  - [ ] `process --only-report --resume` reutiliza ese mismo caso de uso.
+  - [ ] Se validan transcriptos antes de renderizar prompt.
+  - [ ] Se escriben `prompt_used.md`, `llm_response_raw.txt` y `report.md`.
+  - [ ] La metadata de `report` se actualiza en `running`, `completed` y `failed`.
+  - [ ] `--overwrite` reejecuta solo reporting.
+  - [ ] Fallos de reporting preservan transcriptos y metadata previa útil.
+  - [ ] `pdf` no se ejecuta en Sprint 05.
+  - [ ] Si `report` existe pero `process --only-report` no comparte lógica, el WI queda parcialmente implementado.
+- Preguntas de definición y cierre:
+  - Arquitectura:
+    - [ ] ¿El caso de uso compartido evita divergencia entre CLI dedicada y `process`?
+    - [ ] ¿La validación del artifact root se hace antes de tocar providers?
+    - [ ] ¿La CLI no contiene reglas de negocio de reporting?
+  - Negocio:
+    - [ ] ¿El comando permite iterar reportes con bajo coste operativo?
+    - [ ] ¿El usuario entiende que se reutiliza transcripción existente?
+  - Funcional:
+    - [ ] ¿Qué ocurre si `report.md` ya existe y no se pasa `--overwrite`?
+    - [ ] ¿Qué provider/model/template quedan registrados como efectivos?
+    - [ ] ¿Cómo se comporta `process --only-report` si falta `--resume` en una corrida fresca?
+  - No funcional:
+    - [ ] ¿Un fallo remoto no destruye `prompt_used.md` previo salvo que la nueva corrida lo reemplace de forma controlada?
+    - [ ] ¿Los mensajes de error son accionables para prerequisitos ausentes?
+    - [ ] ¿El warning remoto es visible también desde `process --only-report`?
+  - Pruebas:
+    - [ ] ¿Hay integración CLI para `report` nominal e inválido?
+    - [ ] ¿Hay cobertura de compatibilidad con `process --only-report`?
+    - [ ] ¿Hay tests de overwrite limitado?
+  - Documentación:
+    - [ ] ¿El help text conserva coherencia con comandos bootstrap?
+    - [ ] ¿La documentación deja PDF para Sprint 06?
+  - Aceptación/cerrado:
+    - [ ] ¿Se puede regenerar `report.md` sin reejecutar transcripción?
+    - [ ] ¿Un artifact root inválido falla antes de llamar al LLM?
 
 ## Epic 06: Fase 6
 
