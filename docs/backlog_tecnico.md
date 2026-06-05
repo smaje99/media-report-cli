@@ -651,6 +651,9 @@ Scenario: Procesar archivo y detenerse antes de transcribir
 
 ### Sprint 04 - Transcripción y comando `transcribe`
 
+- Estado: hecho
+- Cerrado en: `2026-06-05T02:27:50-05:00`
+
 - Objetivo del sprint: cerrar el pipeline de transcripción y exponer un comando público dedicado.
 - Alcance:
   - provider contract para texto crudo y segmentos;
@@ -815,6 +818,9 @@ Scenario: Ejecutar transcribe sin extra instalada
 
 #### WI-04-03 - Exponer `media-report transcribe`
 
+- Estado: hecho
+- Cerrado en: `2026-06-05T02:27:50-05:00`
+
 - Objetivo: ofrecer un comando público estable para etapa de transcripción.
 - Contexto técnico: hoy `process --only-transcribe` es un placeholder; falta una unidad pública más precisa.
 - Alcance funcional:
@@ -877,6 +883,16 @@ Scenario: Transcribir archivo fuente desde comando dedicado
 - Cierre esperado del WI:
   - `transcribe` opera tanto sobre fuente nueva como sobre artifact root reusable;
   - `process` sigue siendo el orquestador amplio, pero ya no se detiene antes de transcripción.
+
+- Resultado implementado:
+  - la CLI pública ahora expone `media-report transcribe` con soporte para `PATH`, `--language`, `--model` y `--overwrite`, manteniendo el comando como unidad estable y aditiva del bootstrap;
+  - `TranscribeService` quedó consolidado como caso de uso compartido de aplicación y es reutilizado tanto por `transcribe` como por `process`, eliminando la divergencia funcional con `process --only-transcribe`;
+  - el flujo acepta tanto media files nuevos como artifact roots reutilizables, valida `metadata.json`, resuelve el source original y repara `extract_audio` y `normalize_audio` cuando todavía es posible hacerlo;
+  - la reutilización por defecto de una transcripción completada y válida quedó soportada para archivo fuente y para artifact root, mientras que `transcribe --overwrite` fuerza únicamente la etapa `transcribe` sin introducir overwrite destructivo global;
+  - `media-report process PATH` ahora ejecuta por defecto `extract_audio`, `normalize_audio` y `transcribe`, dejando `report` y `pdf` como etapas `planned`, y `process --only-transcribe` comparte exactamente la misma lógica funcional del comando dedicado;
+  - la preferencia de dispositivo quedó cableada desde configuración con `MEDIA_REPORT_WHISPER_DEVICE`, priorizando GPU cuando el runtime lo permite y persistiendo en metadata y `pipeline.log` el dispositivo efectivo y el motivo de fallback a CPU cuando ocurre;
+  - `transcript_raw.txt` y `transcript_segments.json` se persisten como artefactos reales de transcripción mediante un repositorio dedicado de filesystem, manteniendo `metadata.json` en versión 2 con evolución aditiva;
+  - README, help text y la cobertura de pruebas quedaron alineados con la nueva superficie pública, incluyendo casos de archivo fuente, artifact root, `--overwrite`, dependencia opcional ausente y compatibilidad entre `transcribe` y `process --only-transcribe`.
 
 - Resultado esperado:
   - el pipeline ejecuta `transcribe` de forma real y persistente;
