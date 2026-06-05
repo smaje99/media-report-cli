@@ -90,5 +90,5 @@ pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "-ra"
 
-[tool.ty]
-src = ["src", "tests"]
+[tool.ty.src]
+include = ["src", "tests"]
