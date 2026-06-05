@@ -1017,6 +1017,9 @@ Scenario: Transcribir archivo fuente desde comando dedicado
 
 #### WI-05-01 - Servicio de render de prompt y contexto de reporte
 
+- Estado: hecho
+- Cerrado en: `2026-06-05T15:04:04-05:00`
+
 - Objetivo: convertir artefactos de transcripción en prompts deterministas y auditables.
 - Contexto técnico: los templates ya viven en `src/media_report/templates/prompts`, pero hoy solo se listan y validan por nombre.
 - Alcance funcional:
@@ -1112,43 +1115,17 @@ Scenario: Cargar template desde paquete instalado
     - documentar que `prompt_used.md` es artefacto obligatorio de `report`;
     - dejar claro que el prompt persistido es la fuente de auditoría, no la salida de consola;
     - actualizar ayuda del comando cuando `--template` quede operativo.
-- Checklist de implementación:
-  - [ ] Existe un modelo explícito de contexto de reporte.
-  - [ ] El render de prompt no importa infraestructura HTTP ni CLI.
-  - [ ] `PromptTemplateRepository` sigue siendo el punto único de carga de templates.
-  - [ ] `prompt_used.md` se escribe antes de invocar el provider LLM.
-  - [ ] La metadata registra template efectivo y trazabilidad mínima del prompt.
-  - [ ] Template inexistente falla antes de tocar providers.
-  - [ ] Transcripto vacío o inconsistente deja `report` en `failed`.
-  - [ ] No se imprime el prompt completo en consola.
-  - [ ] Las pruebas no dependen de rutas del repositorio.
-  - [ ] Si solo existe el render pero no se actualiza metadata, el WI se considera parcialmente implementado.
-- Preguntas de definición y cierre:
-  - Arquitectura:
-    - [ ] ¿El render de prompt vive en aplicación sin conocer Typer ni HTTP?
-    - [ ] ¿El contexto de reporte es suficientemente estable para `report` y `process --only-report`?
-    - [ ] ¿Se evitó introducir una abstracción especulativa fuera de la presión real del sprint?
-  - Negocio:
-    - [ ] ¿El prompt persistido permite explicar cómo se generó el reporte ante una auditoría?
-    - [ ] ¿Las plantillas soportadas cubren los usos `generic`, `meeting`, `interview`, `technical_report` y `class_notes`?
-  - Funcional:
-    - [ ] ¿Qué ocurre si `transcript_raw.txt` existe pero `transcript_segments.json` no cumple contrato?
-    - [ ] ¿El usuario puede cambiar template sin rehacer transcripción?
-    - [ ] ¿El render es determinista para los mismos inputs?
-  - No funcional:
-    - [ ] ¿Hay límite, medición o advertencia para prompts excesivos?
-    - [ ] ¿La salida de consola evita volcar contenido sensible del transcripto?
-    - [ ] ¿La carga funciona desde wheel/sdist instalado?
-  - Pruebas:
-    - [ ] ¿Hay tests unitarios de render y validación de prerequisitos?
-    - [ ] ¿Hay tests de recurso empaquetado sin path relativo?
-    - [ ] ¿Hay cobertura para estados parciales de metadata?
-  - Documentación:
-    - [ ] ¿La ayuda de `report --template` comunica templates válidas o el camino para listarlas?
-    - [ ] ¿El backlog deja claro que PDF no entra en esta WI?
-  - Aceptación/cerrado:
-    - [ ] ¿Se puede inspeccionar `prompt_used.md` y reproducir el prompt exacto?
-    - [ ] ¿Un fallo de render no deja `report` como completado?
+- Resultado implementado:
+  - se creó `media_report.application.reporting` con el mismo patrón de separación usado en transcripción: `models`, `ports`, `preparation`, `execution` y `service`;
+  - `RenderPromptRequest`, `RenderPromptResult` y `PreparedPromptRun` modelan el caso de uso interno para renderizar prompts sobre artifact roots reutilizables;
+  - `PromptRunPreparer` acepta únicamente artifact directories existentes, valida `metadata.json`, verifica consistencia de `transcript_raw.txt` y `transcript_segments.json`, y actualiza `workflow.template_name` cuando llega override;
+  - `PromptRunExecutor` construye el prompt final mediante concatenación controlada de contexto, template empaquetada y transcripto, persistiendo `prompt_used.md` como evidencia auditable;
+  - la carga de templates sigue encapsulada detrás de `PromptTemplateRepository` y `PackagePromptTemplateRepository`, preservando el uso de `importlib.resources`;
+  - el flujo registra en `pipeline.log` la template efectiva y el tamaño del prompt, sin imprimir el prompt completo en consola;
+  - se añadieron errores tipados para prerequisitos, salida inválida y persistencia del prompt, con mensajería accionable y sin exponer secretos;
+  - la metadata mantiene trazabilidad mínima y aditiva: `workflow.template_name` queda alineado con el render efectivo, sin introducir una nueva versión de esquema;
+  - la etapa `report` no se marca como `completed` en este WI porque todavía no existen `llm_response_raw.txt` ni `report.md`, pero sí falla de forma explícita cuando el render o sus prerrequisitos son inválidos;
+  - la cobertura de pruebas valida render determinista, template inexistente, transcripto vacío, `transcript_segments.json` corrupto, persistencia de `prompt_used.md` y carga de templates empaquetadas desde instalación.
 
 #### WI-05-02 - Implementar providers LLM reales y redacción de secretos
 
