@@ -40,3 +40,11 @@ class TranscribeResult:
     artifacts: ArtifactPlan
     stage_decisions: tuple[StageDecision, ...]
     final_metadata: PipelineMetadata
+
+
+@dataclass(frozen=True)
+class PreparedTranscribeRun:
+    source: MediaSource
+    artifacts: ArtifactPlan
+    metadata: PipelineMetadata
+    stage_decisions: tuple[StageDecision, ...]
