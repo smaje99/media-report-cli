@@ -6,6 +6,7 @@ from media_report.cli.commands.config import config_app
 from media_report.cli.commands.doctor import doctor_command
 from media_report.cli.commands.process import process_command
 from media_report.cli.commands.templates import templates_app
+from media_report.cli.commands.transcribe import transcribe_command
 
 app = typer.Typer(
     name="media-report",
@@ -15,8 +16,12 @@ app = typer.Typer(
 
 app.command(
     "process",
-    help="Process or resume local media through audio preparation stages.",
+    help="Process or resume local media through transcription-ready stages.",
 )(process_command)
+app.command(
+    "transcribe",
+    help="Transcribe a media file or reusable artifact directory.",
+)(transcribe_command)
 app.command(
     "doctor",
     help="Inspect the local bootstrap environment and packaged resources.",

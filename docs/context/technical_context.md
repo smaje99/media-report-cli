@@ -9,6 +9,9 @@
 - httpx for future HTTP-based providers
 - tomli-w for config file creation
 
+Typed integration boundaries for third-party SDKs should stay private to their
+infrastructure adapters when they only describe the minimum external shape needed by that adapter.
+
 ## External Tools
 
 - `ffmpeg` for media extraction and normalization

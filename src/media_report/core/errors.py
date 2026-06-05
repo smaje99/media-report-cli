@@ -116,3 +116,7 @@ class TranscriptionExecutionError(MediaReportError):
 
 class TranscriptionOutputError(MediaReportError):
     """Raised when a transcription provider returns invalid output."""
+
+
+class TranscriptionPersistenceError(MediaReportError):
+    """Raised when transcription artifacts cannot be persisted safely."""

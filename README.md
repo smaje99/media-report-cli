@@ -48,6 +48,7 @@ uv tool install .
 
 ```bash
 media-report process PATH [OPTIONS]
+media-report transcribe PATH [OPTIONS]
 media-report doctor
 media-report config init
 media-report config show
@@ -60,17 +61,24 @@ Version `0.1.0` treats the current bootstrap CLI surface as stable:
 
 - Root command: `media-report`
 - Stable bootstrap commands: `process`, `doctor`, `config init`, `config show`, `templates list`
+- Public stage command: `transcribe`
 - Additive evolution only for new public options and commands
 
 `media-report process` keeps all currently visible flags public, with these current semantics:
 
 | Flag group | Flags | Bootstrap status |
 | --- | --- | --- |
-| Active now | `--recursive`, `--resume`, `--template` | Affect discovery, artifact reuse, and audio-prep execution today |
+| Active now | `--recursive`, `--resume`, `--template` | Affect discovery, artifact reuse, and execution through transcription today |
 | Deprecated compatibility | `--overwrite` | Deprecated alias for `--resume` during Sprint 2; destructive overwrite is intentionally not exposed yet |
 | Active for planning | `--provider`, `--model`, `--output-format` | Affect planned workflow metadata and remote-provider warning today |
-| Planning selectors | `--only-transcribe`, `--only-report` | `--only-transcribe` runs audio prep and leaves transcription planned; `--only-report` requires reusable transcription artifacts and `--resume` |
-| Metadata planning | `--language` | Recorded in pipeline metadata for future transcription execution |
+| Planning selectors | `--only-transcribe`, `--only-report` | `--only-transcribe` executes audio prep plus transcription; `--only-report` requires reusable transcription artifacts and `--resume` |
+| Metadata and transcription | `--language` | Passed to transcription and persisted in pipeline metadata |
+
+`media-report transcribe` accepts a single media file or a reusable artifact directory and exposes:
+
+- `--language`
+- `--model`
+- `--overwrite`
 
 Resume validation currently assumes a sibling artifact directory named `<media_stem>_media_report`
 and requires a valid `metadata.json` plus the minimum outputs for every reused completed stage:
@@ -91,6 +99,8 @@ media-report process ./meeting.mp4 --resume
 media-report process ./recordings --recursive --template meeting
 media-report process ./lecture.mp3 --provider openai-compatible --model gpt-4.1-mini --language es
 media-report process ./lecture.mp3 --resume --only-report
+media-report transcribe ./lecture.mp3 --language es
+media-report transcribe ./lecture_media_report --overwrite
 media-report doctor
 media-report config init
 ```
@@ -100,16 +110,20 @@ media-report config init
 - Validates media input paths
 - Detects supported audio and video files
 - Creates per-file artifact directories next to the source media
-- Executes `extract_audio` and `normalize_audio` during `process`
+- Executes `extract_audio`, `normalize_audio`, and `transcribe` during `process`
+- Exposes `transcribe` as a reusable single-input stage command
+- Persists `transcript_raw.txt` and `transcript_segments.json`
 - Writes and updates `metadata.json` and `pipeline.log`
 - Reuses valid sibling artifact directories when invoked with `--resume`
 - Validates existing metadata strictly before executing a resumed run
-- Prints per-stage decisions and final audio-stage status
+- Prefers GPU-backed transcription when available and falls back to CPU with traceability
+- Prints per-stage decisions and final transcription-stage status
 - Loads packaged prompt and PDF templates from installed package resources
 - Checks external tooling availability with `doctor`
 - Manages config at `~/.config/media-report/config.toml`
 
-Audio preparation through FFmpeg is wired into `process`. Transcription, LLM generation, and PDF rendering remain planned for later phases.
+Audio preparation through FFmpeg and local transcription through `faster-whisper` are wired into
+`process` and `transcribe`. LLM generation and PDF rendering remain planned for later phases.
 
 ## External Dependencies
 
@@ -147,6 +161,7 @@ Supported environment variables:
 - `MEDIA_REPORT_OPENAI_BASE_URL`
 - `MEDIA_REPORT_OLLAMA_BASE_URL`
 - `MEDIA_REPORT_WHISPER_MODEL`
+- `MEDIA_REPORT_WHISPER_DEVICE`
 - `MEDIA_REPORT_OUTPUT_FORMAT`
 - `MEDIA_REPORT_LOG_LEVEL`
 

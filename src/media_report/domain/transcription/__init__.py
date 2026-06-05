@@ -5,9 +5,13 @@ from media_report.domain.transcription.entities import (
     TranscriptionResult,
     TranscriptionSegment,
 )
-from media_report.domain.transcription.ports import TranscriptionProvider
+from media_report.domain.transcription.ports import (
+    TranscriptionArtifactRepository,
+    TranscriptionProvider,
+)
 
 __all__ = [
+    "TranscriptionArtifactRepository",
     "TranscriptionProvider",
     "TranscriptionRequest",
     "TranscriptionResult",

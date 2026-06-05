@@ -10,6 +10,7 @@ class TranscriptionRequest:
     audio_path: Path
     requested_language: str | None = None
     model_override: str | None = None
+    device_preference: str = "auto"
 
 
 @dataclass(frozen=True)
@@ -57,12 +58,19 @@ class TranscriptionResult:
     detected_language: str | None
     segments: tuple[TranscriptionSegment, ...]
     duration_ms: int
+    device_preference: str = "auto"
+    effective_device: str = "cpu"
+    device_fallback_reason: str | None = None
 
     def __post_init__(self) -> None:
         if not self.provider.strip():
             raise ValueError("Transcription provider must not be blank.")
         if not self.model.strip():
             raise ValueError("Transcription model must not be blank.")
+        if not self.device_preference.strip():
+            raise ValueError("Transcription device_preference must not be blank.")
+        if not self.effective_device.strip():
+            raise ValueError("Transcription effective_device must not be blank.")
         if self.duration_ms < 0:
             raise ValueError("Transcription duration_ms must be >= 0.")
         if not self.has_usable_segments():

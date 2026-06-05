@@ -126,6 +126,60 @@ def test_plan_resume_blocks_when_prerequisite_is_missing(tmp_path: Path) -> None
         )
 
 
+def test_plan_resume_can_force_rerun_completed_stage(tmp_path: Path) -> None:
+    _, artifact_plan, metadata = build_metadata(tmp_path)
+    validator = ArtifactRootValidator()
+    planner = PipelineStatePlanner()
+
+    metadata = replace(
+        metadata,
+        stages={
+            **metadata.stages,
+            PipelineStage.EXTRACT_AUDIO: replace(
+                metadata.stages[PipelineStage.EXTRACT_AUDIO],
+                status=PipelineStageStatus.COMPLETED,
+                finished_at=metadata.generated_at,
+            ),
+            PipelineStage.NORMALIZE_AUDIO: replace(
+                metadata.stages[PipelineStage.NORMALIZE_AUDIO],
+                status=PipelineStageStatus.COMPLETED,
+                finished_at=metadata.generated_at,
+            ),
+            PipelineStage.TRANSCRIBE: replace(
+                metadata.stages[PipelineStage.TRANSCRIBE],
+                status=PipelineStageStatus.COMPLETED,
+                finished_at=metadata.generated_at,
+            ),
+        },
+    )
+    artifact_plan.audio_extracted.write_text("audio", encoding="utf-8")
+    artifact_plan.audio_normalized.write_text("audio", encoding="utf-8")
+    artifact_plan.transcript_raw.write_text("transcript", encoding="utf-8")
+    artifact_plan.transcript_segments.write_text(
+        structured_transcript_payload(),
+        encoding="utf-8",
+    )
+    validator.validate(
+        source=MediaSource(path=Path(metadata.source.path), kind=MediaKind.AUDIO),
+        artifact_plan=artifact_plan,
+        metadata=metadata,
+    )
+
+    decisions = planner.plan_resume(
+        metadata=metadata,
+        requested_stages=(
+            PipelineStage.EXTRACT_AUDIO,
+            PipelineStage.NORMALIZE_AUDIO,
+            PipelineStage.TRANSCRIBE,
+        ),
+        force_stages={PipelineStage.TRANSCRIBE},
+    )
+
+    assert decisions[0].decision == PipelineStageDecision.REUSED
+    assert decisions[1].decision == PipelineStageDecision.REUSED
+    assert decisions[2].decision == PipelineStageDecision.PLANNED
+
+
 def test_validator_rejects_completed_stage_without_outputs(tmp_path: Path) -> None:
     media_path, artifact_plan, metadata = build_metadata(tmp_path)
     validator = ArtifactRootValidator()

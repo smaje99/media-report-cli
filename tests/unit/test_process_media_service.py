@@ -4,19 +4,12 @@ import json
 from dataclasses import replace
 from pathlib import Path
 
-import pytest
-
 from media_report.application.process_media.models import ProcessRequest
 from media_report.application.process_media.service import ProcessMediaService
-from media_report.core.errors import MediaProcessingExecutionError
+from media_report.application.transcribe.models import TranscribeRequest, TranscribeResult
 from media_report.domain.artifacts.entities import PipelineStage, PipelineStageStatus
 from media_report.domain.artifacts.service import ArtifactPlanner
-from media_report.domain.media.entities import (
-    ExtractAudioRequest,
-    MediaProcessingResult,
-    MediaSource,
-    NormalizeAudioRequest,
-)
+from media_report.domain.media.entities import MediaSource
 from media_report.infrastructure.filesystem.metadata_repository import (
     JsonPipelineMetadataRepository,
 )
@@ -47,76 +40,44 @@ class StubTemplateRepository:
         return f"template:{name}"
 
 
-class StubMediaProcessor:
-    def __init__(self, *, fail_normalize: bool = False) -> None:
-        self.fail_normalize = fail_normalize
-        self.calls: list[str] = []
+class StubTranscribeService:
+    def __init__(self) -> None:
+        self.calls: list[TranscribeRequest] = []
 
-    def extract_audio(self, request: ExtractAudioRequest) -> MediaProcessingResult:
-        self.calls.append("extract_audio")
-        request.output_path.write_text("audio", encoding="utf-8")
-        return MediaProcessingResult(
-            output_path=request.output_path,
-            command=("ffmpeg", "-i", str(request.source.path), str(request.output_path)),
-            duration_ms=12,
-            stderr_summary=None,
+    def transcribe(self, request: TranscribeRequest) -> TranscribeResult:
+        self.calls.append(request)
+        source = FileSystemMediaScanner().classify(request.input_path)
+        planner = ArtifactPlanner()
+        artifacts = planner.prepare_new(source.path)
+        metadata = planner.bootstrap_metadata(
+            source=source,
+            artifact_plan=artifacts,
+            template_name=request.workflow_template_name,
+            llm_provider=request.workflow_llm_provider,
+            llm_model=request.workflow_llm_model,
+            output_format=request.workflow_output_format,
+            language=request.language,
+            selected_stages=request.workflow_selected_stages,
+        )
+        metadata = planner.mark_stage_completed(metadata, stage=PipelineStage.EXTRACT_AUDIO)
+        metadata = planner.mark_stage_completed(metadata, stage=PipelineStage.NORMALIZE_AUDIO)
+        metadata = planner.mark_stage_completed(metadata, stage=PipelineStage.TRANSCRIBE)
+        JsonPipelineMetadataRepository().write(metadata)
+        return TranscribeResult(
+            source=source,
+            artifacts=artifacts,
+            stage_decisions=(),
+            final_metadata=metadata,
         )
 
-    def normalize_audio(self, request: NormalizeAudioRequest) -> MediaProcessingResult:
-        self.calls.append("normalize_audio")
-        if self.fail_normalize:
-            raise MediaProcessingExecutionError(
-                operation="normalize_audio",
-                exit_code=1,
-                stderr_summary="normalization failed",
-            )
-        request.output_path.write_text("normalized", encoding="utf-8")
-        return MediaProcessingResult(
-            output_path=request.output_path,
-            command=("ffmpeg", "-i", str(request.source_path), str(request.output_path)),
-            duration_ms=15,
-            stderr_summary=None,
-        )
 
-
-def build_service(media_processor: StubMediaProcessor) -> ProcessMediaService:
+def build_service(transcribe_service: StubTranscribeService) -> ProcessMediaService:
     return ProcessMediaService(
         scanner=FileSystemMediaScanner(),
         templates=StubTemplateRepository(),
         metadata_repository=JsonPipelineMetadataRepository(),
-        media_processor=media_processor,
+        transcribe_service=transcribe_service,
     )
-
-
-def write_extract_ready_metadata(media_path: Path) -> Path:
-    planner = ArtifactPlanner()
-    artifact_plan = planner.prepare_new(media_path)
-    source = FileSystemMediaScanner().classify(media_path)
-    metadata = planner.bootstrap_metadata(
-        source=MediaSource(path=media_path, kind=source.kind),
-        artifact_plan=artifact_plan,
-        template_name="generic",
-        llm_provider="ollama",
-        llm_model="llama3.1",
-        output_format="pdf",
-        language=None,
-        selected_stages=tuple(PipelineStage),
-    )
-    metadata = replace(
-        metadata,
-        stages={
-            **metadata.stages,
-            PipelineStage.EXTRACT_AUDIO: replace(
-                metadata.stages[PipelineStage.EXTRACT_AUDIO],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-        },
-    )
-    JsonPipelineMetadataRepository().write(metadata)
-    planner.initialize_log(artifact_plan.root_dir, metadata_schema_version=metadata.schema_version)
-    artifact_plan.audio_extracted.write_text("audio", encoding="utf-8")
-    return artifact_plan.root_dir
 
 
 def write_resume_ready_metadata(media_path: Path) -> Path:
@@ -166,79 +127,42 @@ def write_resume_ready_metadata(media_path: Path) -> Path:
     return artifact_plan.root_dir
 
 
-def test_process_executes_audio_prep_for_new_run(tmp_path: Path) -> None:
+def test_process_delegates_default_flow_to_transcribe_service(tmp_path: Path) -> None:
     media_path = tmp_path / "meeting.mp3"
     media_path.write_text("audio", encoding="utf-8")
-    media_processor = StubMediaProcessor()
-    service = build_service(media_processor)
+    transcribe_service = StubTranscribeService()
+    service = build_service(transcribe_service)
 
     plan = service.process(ProcessRequest(input_path=media_path))
 
-    assert media_processor.calls == ["extract_audio", "normalize_audio"]
-    item = plan.items[0]
-    assert (
-        item.final_metadata.stages[PipelineStage.EXTRACT_AUDIO].status
-        == PipelineStageStatus.COMPLETED
+    assert len(transcribe_service.calls) == 1
+    assert plan.items[0].final_metadata.stages[PipelineStage.TRANSCRIBE].status == (
+        PipelineStageStatus.COMPLETED
     )
-    assert (
-        item.final_metadata.stages[PipelineStage.NORMALIZE_AUDIO].status
-        == PipelineStageStatus.COMPLETED
-    )
-    assert (
-        item.final_metadata.stages[PipelineStage.TRANSCRIBE].status
-        == PipelineStageStatus.PLANNED
-    )
-    assert item.artifacts.audio_extracted.exists()
-    assert item.artifacts.audio_normalized.exists()
 
 
-def test_process_resume_reuses_extract_and_executes_only_normalize(tmp_path: Path) -> None:
+def test_process_only_transcribe_delegates_to_shared_use_case(tmp_path: Path) -> None:
     media_path = tmp_path / "meeting.mp3"
     media_path.write_text("audio", encoding="utf-8")
-    write_extract_ready_metadata(media_path)
-    media_processor = StubMediaProcessor()
-    service = build_service(media_processor)
+    transcribe_service = StubTranscribeService()
+    service = build_service(transcribe_service)
 
-    plan = service.process(ProcessRequest(input_path=media_path, resume=True))
+    service.process(ProcessRequest(input_path=media_path, only_transcribe=True))
 
-    assert media_processor.calls == ["normalize_audio"]
-    item = plan.items[0]
-    assert (
-        item.final_metadata.stages[PipelineStage.EXTRACT_AUDIO].status
-        == PipelineStageStatus.COMPLETED
-    )
-    assert (
-        item.final_metadata.stages[PipelineStage.NORMALIZE_AUDIO].status
-        == PipelineStageStatus.COMPLETED
+    request = transcribe_service.calls[0]
+    assert request.workflow_selected_stages == (
+        PipelineStage.EXTRACT_AUDIO,
+        PipelineStage.NORMALIZE_AUDIO,
+        PipelineStage.TRANSCRIBE,
     )
 
 
-def test_process_persists_failed_normalize_and_preserves_extracted_audio(tmp_path: Path) -> None:
-    media_path = tmp_path / "meeting.mp3"
-    media_path.write_text("audio", encoding="utf-8")
-    media_processor = StubMediaProcessor(fail_normalize=True)
-    service = build_service(media_processor)
-    artifact_dir = media_path.parent / f"{media_path.stem}_media_report"
-
-    with pytest.raises(MediaProcessingExecutionError):
-        service.process(ProcessRequest(input_path=media_path))
-
-    metadata = JsonPipelineMetadataRepository().read(artifact_dir / "metadata.json")
-    assert metadata.stages[PipelineStage.EXTRACT_AUDIO].status == PipelineStageStatus.COMPLETED
-    assert metadata.stages[PipelineStage.NORMALIZE_AUDIO].status == PipelineStageStatus.FAILED
-    error = metadata.stages[PipelineStage.NORMALIZE_AUDIO].error
-    assert error is not None
-    assert error.code == "execution_failed"
-    assert (artifact_dir / "audio_extracted.wav").exists()
-    assert not (artifact_dir / "audio_normalized.wav").exists()
-
-
-def test_process_does_not_execute_audio_prep_for_resume_only_report(tmp_path: Path) -> None:
+def test_process_only_report_does_not_delegate_to_transcribe_service(tmp_path: Path) -> None:
     media_path = tmp_path / "meeting.mp3"
     media_path.write_text("audio", encoding="utf-8")
     write_resume_ready_metadata(media_path)
-    media_processor = StubMediaProcessor()
-    service = build_service(media_processor)
+    transcribe_service = StubTranscribeService()
+    service = build_service(transcribe_service)
 
     plan = service.process(
         ProcessRequest(
@@ -248,13 +172,7 @@ def test_process_does_not_execute_audio_prep_for_resume_only_report(tmp_path: Pa
         )
     )
 
-    assert media_processor.calls == []
-    item = plan.items[0]
-    assert (
-        item.final_metadata.stages[PipelineStage.EXTRACT_AUDIO].status
-        == PipelineStageStatus.COMPLETED
-    )
-    assert (
-        item.final_metadata.stages[PipelineStage.NORMALIZE_AUDIO].status
-        == PipelineStageStatus.COMPLETED
+    assert transcribe_service.calls == []
+    assert plan.items[0].final_metadata.stages[PipelineStage.TRANSCRIBE].status == (
+        PipelineStageStatus.COMPLETED
     )

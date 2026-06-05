@@ -15,6 +15,9 @@ model = "llama3.2"
 [openai]
 api_key = "file-secret"
 base_url = "https://example.invalid/v1"
+
+[transcription]
+device = "cpu"
 """.strip(),
         encoding="utf-8",
     )
@@ -26,9 +29,11 @@ base_url = "https://example.invalid/v1"
     assert settings.llm_model == "gpt-4.1-mini"
     assert settings.openai_api_key == "file-secret"
     assert settings.openai_base_url == "https://example.invalid/v1"
+    assert settings.whisper_device == "cpu"
 
 
 def test_display_dict_redacts_secret() -> None:
     settings = AppSettings(openai_api_key="sk-example-secret")
 
     assert settings.to_display_dict()["openai_api_key"] == "sk***et"
+    assert settings.to_display_dict()["whisper_device"] == "auto"

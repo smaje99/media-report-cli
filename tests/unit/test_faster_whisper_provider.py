@@ -89,14 +89,15 @@ def test_provider_raises_actionable_error_when_dependency_is_missing(monkeypatch
 
 
 def test_provider_uses_model_override_and_maps_segments(monkeypatch) -> None:
-    calls: list[tuple[str, str, str | None]] = []
+    calls: list[tuple[str, str, str, str | None]] = []
 
     class FakeWhisperModel:
-        def __init__(self, model_name: str) -> None:
+        def __init__(self, model_name: str, *, device: str) -> None:
             self.model_name = model_name
+            self.device = device
 
         def transcribe(self, audio_path: str, language: str | None = None):  # type: ignore[no-untyped-def]
-            calls.append((self.model_name, audio_path, language))
+            calls.append((self.model_name, self.device, audio_path, language))
             return (
                 [
                     FakeSegment(
@@ -120,6 +121,10 @@ def test_provider_uses_model_override_and_maps_segments(monkeypatch) -> None:
         "media_report.infrastructure.transcription.capabilities.importlib.import_module",
         lambda name: SimpleNamespace(WhisperModel=FakeWhisperModel),
     )
+    monkeypatch.setattr(
+        "media_report.infrastructure.transcription.faster_whisper_provider.platform.system",
+        lambda: "Linux",
+    )
 
     provider = FasterWhisperProvider(default_model="small")
     result = provider.transcribe(
@@ -130,11 +135,14 @@ def test_provider_uses_model_override_and_maps_segments(monkeypatch) -> None:
         )
     )
 
-    assert calls == [("large-v3", str(TEST_AUDIO_PATH), "es")]
+    assert calls == [("large-v3", "cuda", str(TEST_AUDIO_PATH), "es")]
     assert result.provider == "faster-whisper"
     assert result.model == "large-v3"
     assert result.requested_language == "es"
     assert result.detected_language == "es"
+    assert result.device_preference == "auto"
+    assert result.effective_device == "cuda"
+    assert result.device_fallback_reason is None
     assert result.raw_text == "hola\nmundo"
     assert result.segments[0].index == 3
     assert result.segments[0].confidence == pytest.approx(0.87)
@@ -143,7 +151,7 @@ def test_provider_uses_model_override_and_maps_segments(monkeypatch) -> None:
 
 def test_provider_maps_model_initialization_failures(monkeypatch) -> None:
     class FailingWhisperModel:
-        def __init__(self, model_name: str) -> None:
+        def __init__(self, model_name: str, *, device: str) -> None:
             raise RuntimeError(f"unknown model {model_name}")
 
     monkeypatch.setattr(
@@ -159,7 +167,7 @@ def test_provider_maps_model_initialization_failures(monkeypatch) -> None:
 
 def test_provider_maps_execution_failures(monkeypatch) -> None:
     class FakeWhisperModel:
-        def __init__(self, model_name: str) -> None:
+        def __init__(self, model_name: str, *, device: str) -> None:
             self.model_name = model_name
 
         def transcribe(self, audio_path: str, language: str | None = None):  # type: ignore[no-untyped-def]
@@ -178,7 +186,7 @@ def test_provider_maps_execution_failures(monkeypatch) -> None:
 
 def test_provider_rejects_empty_or_invalid_output(monkeypatch) -> None:
     class FakeWhisperModel:
-        def __init__(self, model_name: str) -> None:
+        def __init__(self, model_name: str, *, device: str) -> None:
             self.model_name = model_name
 
         def transcribe(self, audio_path: str, language: str | None = None):  # type: ignore[no-untyped-def]
@@ -193,3 +201,117 @@ def test_provider_rejects_empty_or_invalid_output(monkeypatch) -> None:
 
     with pytest.raises(TranscriptionOutputError, match="invalid transcription output"):
         provider.transcribe(TranscriptionRequest(audio_path=TEST_AUDIO_PATH))
+
+
+def test_provider_falls_back_to_cpu_for_auto_on_linux(monkeypatch) -> None:
+    calls: list[tuple[str, str]] = []
+
+    class FakeWhisperModel:
+        def __init__(self, model_name: str, *, device: str) -> None:
+            calls.append((model_name, device))
+            if device == "cuda":
+                raise RuntimeError("cuda unavailable")
+            self.model_name = model_name
+            self.device = device
+
+        def transcribe(self, audio_path: str, language: str | None = None):  # type: ignore[no-untyped-def]
+            return (
+                [FakeSegment(segment_id=0, start=0.0, end=1.0, text="hello")],
+                SimpleNamespace(language="en"),
+            )
+
+    monkeypatch.setattr(
+        "media_report.infrastructure.transcription.capabilities.importlib.import_module",
+        lambda name: SimpleNamespace(WhisperModel=FakeWhisperModel),
+    )
+    monkeypatch.setattr(
+        "media_report.infrastructure.transcription.faster_whisper_provider.platform.system",
+        lambda: "Linux",
+    )
+
+    result = FasterWhisperProvider(default_model="small").transcribe(
+        TranscriptionRequest(audio_path=TEST_AUDIO_PATH)
+    )
+
+    assert calls == [("small", "cuda"), ("small", "cpu")]
+    assert result.effective_device == "cpu"
+    assert "cuda unavailable" in (result.device_fallback_reason or "")
+
+
+def test_provider_honors_explicit_cpu_device(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeWhisperModel:
+        def __init__(self, model_name: str, *, device: str) -> None:
+            calls.append(device)
+
+        def transcribe(self, audio_path: str, language: str | None = None):  # type: ignore[no-untyped-def]
+            return (
+                [FakeSegment(segment_id=0, start=0.0, end=1.0, text="hello")],
+                SimpleNamespace(language="en"),
+            )
+
+    monkeypatch.setattr(
+        "media_report.infrastructure.transcription.capabilities.importlib.import_module",
+        lambda name: SimpleNamespace(WhisperModel=FakeWhisperModel),
+    )
+
+    result = FasterWhisperProvider(default_model="small").transcribe(
+        TranscriptionRequest(audio_path=TEST_AUDIO_PATH, device_preference="cpu")
+    )
+
+    assert calls == ["cpu"]
+    assert result.device_preference == "cpu"
+    assert result.effective_device == "cpu"
+    assert result.device_fallback_reason is None
+
+
+def test_provider_falls_back_to_cpu_for_auto_on_macos(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeWhisperModel:
+        def __init__(self, model_name: str, *, device: str) -> None:
+            calls.append(device)
+            if device == "mps":
+                raise RuntimeError("mps unavailable")
+
+        def transcribe(self, audio_path: str, language: str | None = None):  # type: ignore[no-untyped-def]
+            return (
+                [FakeSegment(segment_id=0, start=0.0, end=1.0, text="hello")],
+                SimpleNamespace(language="en"),
+            )
+
+    monkeypatch.setattr(
+        "media_report.infrastructure.transcription.capabilities.importlib.import_module",
+        lambda name: SimpleNamespace(WhisperModel=FakeWhisperModel),
+    )
+    monkeypatch.setattr(
+        "media_report.infrastructure.transcription.faster_whisper_provider.platform.system",
+        lambda: "Darwin",
+    )
+
+    result = FasterWhisperProvider(default_model="small").transcribe(
+        TranscriptionRequest(audio_path=TEST_AUDIO_PATH)
+    )
+
+    assert calls == ["mps", "cpu"]
+    assert result.effective_device == "cpu"
+    assert "mps unavailable" in (result.device_fallback_reason or "")
+
+
+def test_provider_does_not_fallback_for_explicit_cuda(monkeypatch) -> None:
+    class FakeWhisperModel:
+        def __init__(self, model_name: str, *, device: str) -> None:
+            raise RuntimeError("cuda unavailable")
+
+    monkeypatch.setattr(
+        "media_report.infrastructure.transcription.capabilities.importlib.import_module",
+        lambda name: SimpleNamespace(WhisperModel=FakeWhisperModel),
+    )
+
+    provider = FasterWhisperProvider(default_model="small")
+
+    with pytest.raises(TranscriptionModelError, match="device 'cuda' failed: cuda unavailable"):
+        provider.transcribe(
+            TranscriptionRequest(audio_path=TEST_AUDIO_PATH, device_preference="cuda")
+        )

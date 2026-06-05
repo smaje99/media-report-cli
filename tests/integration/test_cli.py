@@ -5,22 +5,27 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from media_report.cli.app import app
-from media_report.core.errors import MediaProcessingExecutionError
+from media_report.core.errors import (
+    MediaProcessingExecutionError,
+    OptionalDependencyMissingError,
+)
 from media_report.domain.artifacts.entities import PipelineStage, PipelineStageStatus
 from media_report.domain.artifacts.service import ArtifactPlanner
 from media_report.domain.media.entities import MediaProcessingResult, MediaSource
+from media_report.domain.transcription.entities import (
+    TranscriptionResult,
+    TranscriptionSegment,
+)
 from media_report.infrastructure.ffmpeg.service import FFmpegService
 from media_report.infrastructure.filesystem.metadata_repository import (
     JsonPipelineMetadataRepository,
 )
 from media_report.infrastructure.filesystem.scanner import FileSystemMediaScanner
-from media_report.infrastructure.transcription import TranscriptionCapability
+from media_report.infrastructure.transcription import FasterWhisperProvider, TranscriptionCapability
+from media_report.infrastructure.transcription.capabilities import TRANSCRIPTION_INSTALL_HINT
 
 runner = CliRunner()
-TRANSCRIPTION_HINT = (
-    '`pip install "media-report-cli[transcription]"` '
-    "or `uv sync --extra transcription`."
-)
+TRANSCRIPTION_HINT = TRANSCRIPTION_INSTALL_HINT
 
 
 def combined_output(result: object) -> str:
@@ -77,6 +82,42 @@ def stub_media_processing(monkeypatch, *, fail_normalize: bool = False) -> None:
     monkeypatch.setattr(FFmpegService, "normalize_audio", fake_normalize)
 
 
+def stub_transcription(
+    monkeypatch,
+    *,
+    fail: bool = False,
+    effective_device: str = "cpu",
+    fallback_reason: str | None = None,
+) -> None:
+    def fake_transcribe(self, request):  # type: ignore[no-untyped-def]
+        if fail:
+            raise OptionalDependencyMissingError(
+                dependency_name="faster-whisper",
+                feature_name="transcription",
+                install_hint=TRANSCRIPTION_HINT,
+            )
+        return TranscriptionResult(
+            provider="faster-whisper",
+            model=request.model_override or "small",
+            requested_language=request.requested_language,
+            detected_language=request.requested_language or "en",
+            segments=(
+                TranscriptionSegment(
+                    index=0,
+                    start_seconds=0.0,
+                    end_seconds=1.0,
+                    text="transcript",
+                ),
+            ),
+            duration_ms=42,
+            device_preference=request.device_preference,
+            effective_device=effective_device,
+            device_fallback_reason=fallback_reason,
+        )
+
+    monkeypatch.setattr(FasterWhisperProvider, "transcribe", fake_transcribe)
+
+
 def write_resume_ready_metadata(media_path: Path) -> Path:
     planner = ArtifactPlanner()
     artifact_plan = planner.prepare_new(media_path)
@@ -131,10 +172,10 @@ def test_root_help_exposes_bootstrap_contract() -> None:
     assert result.exit_code == 0
     assert "Process local media" in result.stdout
     assert "process" in result.stdout
+    assert "transcribe" in result.stdout
     assert "doctor" in result.stdout
     assert "config" in result.stdout
     assert "templates" in result.stdout
-    assert "Process or resume local media through audio preparation stages." in result.stdout
     assert "Inspect the local bootstrap environment and packaged resources." in result.stdout
 
 
@@ -144,6 +185,7 @@ def test_root_without_arguments_shows_help() -> None:
     assert result.exit_code == 0
     assert "Usage: media-report" in combined_output(result)
     assert "process" in combined_output(result)
+    assert "transcribe" in combined_output(result)
     assert "doctor" in combined_output(result)
 
 
@@ -151,7 +193,7 @@ def test_process_help_documents_bootstrap_flag_contract() -> None:
     result = runner.invoke(app, ["process", "--help"])
 
     assert result.exit_code == 0
-    assert "Process or resume local media through audio preparation stages." in result.stdout
+    assert "Process or resume local media through transcription-ready stages." in result.stdout
     for flag in (
         "--recursive",
         "--resume",
@@ -167,6 +209,15 @@ def test_process_help_documents_bootstrap_flag_contract() -> None:
         assert flag in result.stdout
     assert "Deprecated alias for --resume" in result.stdout
     assert "--only-report" in result.stdout
+
+
+def test_transcribe_help_documents_public_flags() -> None:
+    result = runner.invoke(app, ["transcribe", "--help"])
+
+    assert result.exit_code == 0
+    assert "Transcribe a media file or reusable artifact directory." in result.stdout
+    for flag in ("--language", "--model", "--overwrite"):
+        assert flag in result.stdout
 
 
 def test_config_help_exposes_public_commands_only() -> None:
@@ -268,6 +319,7 @@ def test_process_creates_artifact_directory_and_metadata(
 ) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     stub_media_processing(monkeypatch)
+    stub_transcription(monkeypatch, effective_device="cuda")
 
     result = runner.invoke(app, ["process", str(single_media_path)])
 
@@ -291,19 +343,21 @@ def test_process_creates_artifact_directory_and_metadata(
     ]
     assert metadata["stages"]["extract_audio"]["status"] == "completed"
     assert metadata["stages"]["normalize_audio"]["status"] == "completed"
-    assert metadata["stages"]["transcribe"]["status"] == "planned"
-    assert metadata["stages"]["transcribe"]["started_at"] is None
-    assert metadata["stages"]["transcribe"]["finished_at"] is None
-    assert metadata["stages"]["transcribe"]["updated_at"] == metadata["generated_at"]
-    assert metadata["stages"]["transcribe"]["error"] is None
+    assert metadata["stages"]["transcribe"]["status"] == "completed"
+    assert metadata["transcription"]["effective_device"] == "cuda"
     assert (artifact_dir / "audio_extracted.wav").exists()
     assert (artifact_dir / "audio_normalized.wav").exists()
+    assert (artifact_dir / "transcript_raw.txt").exists()
+    assert (artifact_dir / "transcript_segments.json").exists()
     assert "metadata initialized (schema v2)" in log_path.read_text(encoding="utf-8")
     assert "extract_audio: planned" in result.stdout
+    assert "transcribe: planned" in result.stdout
+    assert "report: skipped" not in result.stdout
     assert "report: planned" in result.stdout
     assert "pdf: planned" in result.stdout
     assert "extract_audio status: completed" in result.stdout
     assert "normalize_audio status: completed" in result.stdout
+    assert "transcribe status: completed" in result.stdout
 
 
 def test_process_only_transcribe_limits_planned_stages(
@@ -311,6 +365,7 @@ def test_process_only_transcribe_limits_planned_stages(
 ) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     stub_media_processing(monkeypatch)
+    stub_transcription(monkeypatch)
 
     result = runner.invoke(app, ["process", str(single_media_path), "--only-transcribe"])
     metadata_path = (
@@ -331,7 +386,7 @@ def test_process_only_transcribe_limits_planned_stages(
     ]
     assert metadata["stages"]["extract_audio"]["status"] == "completed"
     assert metadata["stages"]["normalize_audio"]["status"] == "completed"
-    assert metadata["stages"]["transcribe"]["status"] == "planned"
+    assert metadata["stages"]["transcribe"]["status"] == "completed"
     assert metadata["stages"]["report"]["status"] == "skipped"
     assert metadata["stages"]["report"]["finished_at"] == metadata["generated_at"]
     assert metadata["stages"]["pdf"]["status"] == "skipped"
@@ -367,6 +422,7 @@ def test_process_recursive_directory_plans_supported_media_only(
 ) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     stub_media_processing(monkeypatch)
+    stub_transcription(monkeypatch)
     input_dir = recursive_fixture_dir
     expected_sources = FileSystemMediaScanner().scan(input_dir, recursive=True)
 
@@ -384,6 +440,7 @@ def test_process_recursive_directory_plans_supported_media_only(
         assert metadata["source"]["kind"] == source.kind.value
         assert metadata["stages"]["extract_audio"]["status"] == "completed"
         assert metadata["stages"]["normalize_audio"]["status"] == "completed"
+        assert metadata["stages"]["transcribe"]["status"] == "completed"
 
 
 def test_process_invalid_path_exits_with_code_one(tmp_path: Path, monkeypatch) -> None:
@@ -405,15 +462,32 @@ def test_process_resume_reuses_completed_transcription_artifacts(
     result = runner.invoke(app, ["process", str(single_media_path), "--resume", "--only-report"])
 
     assert result.exit_code == 0
-    assert "extract_audio: reused" in result.stdout
-    assert "normalize_audio: reused" in result.stdout
-    assert "transcribe: reused" in result.stdout
+    assert_stdout_contains_all(
+        "extract_audio: reused",
+        result,
+        "normalize_audio: reused",
+        "transcribe: reused",
+    )
     assert "report: planned" in result.stdout
     assert "pdf: planned" in result.stdout
     metadata = json.loads((artifact_root / "metadata.json").read_text(encoding="utf-8"))
     assert metadata["workflow"]["selected_stages"] == ["report", "pdf"]
-    assert "extract_audio status: completed" in result.stdout
-    assert "normalize_audio status: completed" in result.stdout
+    assert_stdout_contains_all(
+        "extract_audio status: completed",
+        result,
+        "normalize_audio status: completed",
+        "transcribe status: completed",
+    )
+
+
+def assert_stdout_contains_all(
+    first_fragment: str,
+    result,  # type: ignore[no-untyped-def]
+    *remaining_fragments: str,
+) -> None:
+    expected_fragments = (first_fragment, *remaining_fragments)
+    for fragment in expected_fragments:
+        assert fragment in result.stdout
 
 
 def test_process_overwrite_warns_and_behaves_like_resume(
@@ -563,6 +637,7 @@ def test_process_resume_executes_only_normalize_when_extract_is_completed(
 
     monkeypatch.setattr(FFmpegService, "extract_audio", fail_if_extract_called)
     monkeypatch.setattr(FFmpegService, "normalize_audio", fake_normalize)
+    stub_transcription(monkeypatch)
 
     result = runner.invoke(app, ["process", str(single_media_path), "--resume"])
     refreshed = json.loads((artifact_plan.metadata_json).read_text(encoding="utf-8"))
@@ -570,4 +645,82 @@ def test_process_resume_executes_only_normalize_when_extract_is_completed(
     assert result.exit_code == 0
     assert refreshed["stages"]["extract_audio"]["status"] == "completed"
     assert refreshed["stages"]["normalize_audio"]["status"] == "completed"
+    assert refreshed["stages"]["transcribe"]["status"] == "completed"
     assert (artifact_plan.audio_normalized).exists()
+
+
+def test_transcribe_command_processes_media_file(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    stub_media_processing(monkeypatch)
+    stub_transcription(monkeypatch, effective_device="cuda")
+
+    result = runner.invoke(app, ["transcribe", str(single_media_path), "--language", "es"])
+
+    artifact_dir = single_media_path.parent / f"{single_media_path.stem}_media_report"
+    metadata = json.loads((artifact_dir / "metadata.json").read_text(encoding="utf-8"))
+
+    assert result.exit_code == 0
+    assert metadata["stages"]["transcribe"]["status"] == "completed"
+    assert metadata["transcription"]["effective_device"] == "cuda"
+    assert "transcribe status: completed" in result.stdout
+
+
+def test_transcribe_command_reuses_completed_artifact_root_without_source(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    artifact_root = write_resume_ready_metadata(single_media_path)
+    single_media_path.unlink()
+
+    result = runner.invoke(app, ["transcribe", str(artifact_root)])
+
+    assert result.exit_code == 0
+    assert "transcribe status: completed" in result.stdout
+
+
+def test_transcribe_command_overwrite_reruns_only_transcribe(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    artifact_root = write_resume_ready_metadata(single_media_path)
+    stub_media_processing(monkeypatch)
+    stub_transcription(
+        monkeypatch,
+        effective_device="cpu",
+        fallback_reason="auto fallback to 'cpu' after cuda: unavailable",
+    )
+
+    result = runner.invoke(app, ["transcribe", str(artifact_root), "--overwrite"])
+
+    metadata = json.loads((artifact_root / "metadata.json").read_text(encoding="utf-8"))
+    assert result.exit_code == 0
+    assert metadata["stages"]["transcribe"]["status"] == "completed"
+    assert metadata["transcription"]["device_fallback_reason"] is not None
+
+
+def test_transcribe_command_fails_for_invalid_artifact_directory(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    invalid_root = tmp_path / "not-an-artifact-root"
+    invalid_root.mkdir()
+
+    result = runner.invoke(app, ["transcribe", str(invalid_root)])
+
+    assert result.exit_code == 1
+    assert "Artifact metadata is missing" in result.stdout
+
+
+def test_transcribe_command_fails_with_actionable_dependency_message(
+    tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+    stub_media_processing(monkeypatch)
+    stub_transcription(monkeypatch, fail=True)
+
+    result = runner.invoke(app, ["transcribe", str(single_media_path)])
+
+    assert result.exit_code == 1
+    assert "media-report-cli[transcription]" in result.stdout

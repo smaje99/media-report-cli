@@ -19,6 +19,7 @@ class ProcessRequest:
     llm_provider: str = "ollama"
     llm_model: str = "llama3.1"
     language: str | None = None
+    transcription_device: str = "auto"
     output_format: str = "pdf"
 
 

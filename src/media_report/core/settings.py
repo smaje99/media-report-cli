@@ -25,6 +25,7 @@ class AppSettings(BaseSettings):
     openai_base_url: str = "https://api.openai.com/v1"
     ollama_base_url: str = "http://localhost:11434"
     whisper_model: str = "small"
+    whisper_device: str = "auto"
     output_format: str = "pdf"
     log_level: str = "INFO"
     config_path: Path = Field(default_factory=default_config_path)
@@ -38,6 +39,7 @@ class AppSettings(BaseSettings):
             "openai_base_url": self.openai_base_url,
             "ollama_base_url": self.ollama_base_url,
             "whisper_model": self.whisper_model,
+            "whisper_device": self.whisper_device,
             "output_format": self.output_format,
             "log_level": self.log_level,
         }
@@ -50,6 +52,7 @@ ENV_FIELD_MAP = {
     "MEDIA_REPORT_OPENAI_BASE_URL": "openai_base_url",
     "MEDIA_REPORT_OLLAMA_BASE_URL": "ollama_base_url",
     "MEDIA_REPORT_WHISPER_MODEL": "whisper_model",
+    "MEDIA_REPORT_WHISPER_DEVICE": "whisper_device",
     "MEDIA_REPORT_OUTPUT_FORMAT": "output_format",
     "MEDIA_REPORT_LOG_LEVEL": "log_level",
 }
@@ -83,6 +86,7 @@ def default_config_data() -> dict[str, Any]:
         },
         "transcription": {
             "model": "small",
+            "device": "auto",
         },
         "logging": {
             "level": "INFO",
@@ -112,6 +116,8 @@ def _flatten_config(data: dict[str, Any]) -> dict[str, Any]:
         flattened["ollama_base_url"] = ollama["base_url"]
     if "model" in transcription:
         flattened["whisper_model"] = transcription["model"]
+    if "device" in transcription:
+        flattened["whisper_device"] = transcription["device"]
     if "level" in logging:
         flattened["log_level"] = logging["level"]
 

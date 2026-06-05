@@ -41,6 +41,9 @@ def test_metadata_repository_round_trip_v2(tmp_path: Path) -> None:
             detected_language="es",
             duration_ms=123,
             completed_at=metadata.generated_at,
+            device_preference="auto",
+            effective_device="cpu",
+            device_fallback_reason="auto fallback to 'cpu' after cuda: unavailable",
         ),
     )
 
@@ -54,6 +57,7 @@ def test_metadata_repository_round_trip_v2(tmp_path: Path) -> None:
     assert loaded.stages[PipelineStage.TRANSCRIBE].status == PipelineStageStatus.SKIPPED
     assert loaded.transcription is not None
     assert loaded.transcription.duration_ms == 123
+    assert loaded.transcription.effective_device == "cpu"
 
 
 def test_metadata_repository_rejects_non_v2_schema(tmp_path: Path) -> None:

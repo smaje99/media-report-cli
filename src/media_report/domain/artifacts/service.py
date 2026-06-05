@@ -242,6 +242,9 @@ class ArtifactPlanner:
                 detected_language=result.detected_language,
                 duration_ms=result.duration_ms,
                 completed_at=completed_at or self._now(),
+                device_preference=result.device_preference,
+                effective_device=result.effective_device,
+                device_fallback_reason=result.device_fallback_reason,
             ),
         )
 
@@ -455,11 +458,13 @@ class PipelineStatePlanner:
         *,
         metadata: PipelineMetadata,
         requested_stages: tuple[PipelineStage, ...],
+        force_stages: set[PipelineStage] | None = None,
     ) -> tuple[StageDecision, ...]:
         furthest_requested_index = max(
             self.STAGE_SEQUENCE.index(stage) for stage in requested_stages
         )
         requested_stage_set = set(requested_stages)
+        force_stages = force_stages or set()
         satisfied_stages: set[PipelineStage] = set()
         decisions: list[StageDecision] = []
 
@@ -475,7 +480,10 @@ class PipelineStatePlanner:
                 continue
 
             stage_metadata = metadata.stages[stage]
-            if stage_metadata.status == PipelineStageStatus.COMPLETED:
+            if (
+                stage_metadata.status == PipelineStageStatus.COMPLETED
+                and stage not in force_stages
+            ):
                 decisions.append(
                     StageDecision(
                         stage=stage,

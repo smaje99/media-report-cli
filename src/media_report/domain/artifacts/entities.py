@@ -213,6 +213,9 @@ class PipelineTranscriptionMetadata:
     detected_language: str | None
     duration_ms: int
     completed_at: str
+    device_preference: str = "auto"
+    effective_device: str = "cpu"
+    device_fallback_reason: str | None = None
 
     def to_payload(self) -> dict[str, Any]:
         return {
@@ -222,6 +225,9 @@ class PipelineTranscriptionMetadata:
             "detected_language": self.detected_language,
             "duration_ms": self.duration_ms,
             "completed_at": self.completed_at,
+            "device_preference": self.device_preference,
+            "effective_device": self.effective_device,
+            "device_fallback_reason": self.device_fallback_reason,
         }
 
     @classmethod
@@ -233,6 +239,9 @@ class PipelineTranscriptionMetadata:
             detected_language=payload.get("detected_language"),
             duration_ms=int(payload["duration_ms"]),
             completed_at=str(payload["completed_at"]),
+            device_preference=str(payload.get("device_preference", "auto")),
+            effective_device=str(payload.get("effective_device", "cpu")),
+            device_fallback_reason=payload.get("device_fallback_reason"),
         )
 
 
