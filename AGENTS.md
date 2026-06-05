@@ -61,6 +61,11 @@
 
 ## Extensibility Rules
 
+### Design Guidance
+
+- Validate each new abstraction or pattern against a concrete change pressure such as volatility, boundary isolation, invariants, or testability.
+- Prefer the simplest implementation that preserves the hexagonal boundaries; avoid speculative indirection when a local refactor or explicit flow is enough.
+
 ### Adding An LLM Provider
 
 - Implement the `LLMProvider` port.
