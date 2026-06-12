@@ -1,5 +1,4 @@
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -32,19 +31,20 @@ def test_metadata_repository_round_trip_v2(tmp_path: Path) -> None:
         language=None,
         selected_stages=(PipelineStage.REPORT, PipelineStage.PDF),
     )
-    metadata = replace(
-        metadata,
-        transcription=PipelineTranscriptionMetadata(
-            provider="stub",
-            model="stub-small",
-            requested_language="es",
-            detected_language="es",
-            duration_ms=123,
-            completed_at=metadata.generated_at,
-            device_preference="auto",
-            effective_device="cpu",
-            device_fallback_reason="auto fallback to 'cpu' after cuda: unavailable",
-        ),
+    metadata = metadata.model_copy(
+        update={
+            "transcription": PipelineTranscriptionMetadata(
+                provider="stub",
+                model="stub-small",
+                requested_language="es",
+                detected_language="es",
+                duration_ms=123,
+                completed_at=metadata.generated_at,
+                device_preference="auto",
+                effective_device="cpu",
+                device_fallback_reason="auto fallback to 'cpu' after cuda: unavailable",
+            )
+        }
     )
 
     repository = JsonPipelineMetadataRepository()
@@ -85,7 +85,7 @@ def test_metadata_repository_reads_v2_payload_without_transcription_block(tmp_pa
         language=None,
         selected_stages=(PipelineStage.REPORT, PipelineStage.PDF),
     )
-    payload = metadata.to_payload()
+    payload = metadata.model_dump(mode="json")
     payload.pop("transcription")
     artifact_plan.metadata_json.write_text(json.dumps(payload), encoding="utf-8")
 

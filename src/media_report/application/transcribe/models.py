@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict
 
 from media_report.domain.artifacts.entities import (
     ArtifactPlan,
@@ -18,8 +19,9 @@ DEFAULT_TRANSCRIBE_STAGES = (
 )
 
 
-@dataclass(frozen=True)
-class TranscribeRequest:
+class TranscribeRequest(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     input_path: Path
     overwrite: bool = False
     reuse_existing_artifacts: bool = True
@@ -34,16 +36,18 @@ class TranscribeRequest:
     workflow_selected_stages: tuple[PipelineStage, ...] = DEFAULT_TRANSCRIBE_STAGES
 
 
-@dataclass(frozen=True)
-class TranscribeResult:
+class TranscribeResult(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     source: MediaSource
     artifacts: ArtifactPlan
     stage_decisions: tuple[StageDecision, ...]
     final_metadata: PipelineMetadata
 
 
-@dataclass(frozen=True)
-class PreparedTranscribeRun:
+class PreparedTranscribeRun(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     source: MediaSource
     artifacts: ArtifactPlan
     metadata: PipelineMetadata

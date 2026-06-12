@@ -34,7 +34,8 @@ def test_transcription_result_derives_raw_text_from_segments() -> None:
     )
 
     assert result.raw_text == "hola\nmundo"
-    assert result.to_artifact_payload()["segments"][1]["confidence"] == pytest.approx(0.9)
+    assert result.model_dump(mode="json")["segments"][1]["confidence"] == pytest.approx(0.9)
+    assert TranscriptionResult.model_validate(result.model_dump(mode="json")) == result
 
 
 def test_transcription_result_rejects_empty_segments() -> None:

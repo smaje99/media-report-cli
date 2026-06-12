@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict
 
 from media_report.domain.artifacts.entities import (
     ArtifactPlan,
@@ -14,16 +15,18 @@ from media_report.domain.media.entities import MediaSource
 DEFAULT_RENDER_PROMPT_STAGES = (PipelineStage.REPORT,)
 
 
-@dataclass(frozen=True)
-class RenderPromptRequest:
+class RenderPromptRequest(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     input_path: Path
     template_name: str | None = None
     overwrite: bool = False
     workflow_selected_stages: tuple[PipelineStage, ...] = DEFAULT_RENDER_PROMPT_STAGES
 
 
-@dataclass(frozen=True)
-class RenderPromptResult:
+class RenderPromptResult(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     source: MediaSource
     artifacts: ArtifactPlan
     stage_decisions: tuple[StageDecision, ...]
@@ -32,8 +35,9 @@ class RenderPromptResult:
     rendered_prompt: str
 
 
-@dataclass(frozen=True)
-class PreparedPromptRun:
+class PreparedPromptRun(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     source: MediaSource
     artifacts: ArtifactPlan
     metadata: PipelineMetadata

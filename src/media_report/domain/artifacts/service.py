@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
+
+from pydantic import ValidationError
 
 from media_report.core.constants import ARTIFACT_SUFFIX
 from media_report.core.errors import (
@@ -82,22 +83,22 @@ class ArtifactPlanner:
             schema_version=2,
             generated_at=generated_at,
             source=PipelineSourceMetadata(
-                path=str(source.path),
+                path=source.path,
                 kind=source.kind.value,
             ),
             artifacts=PipelineArtifactMetadata(
-                root_dir=str(artifact_plan.root_dir),
-                metadata_json=str(artifact_plan.metadata_json),
-                pipeline_log=str(artifact_plan.pipeline_log),
-                audio_extracted=str(artifact_plan.audio_extracted),
-                audio_normalized=str(artifact_plan.audio_normalized),
-                transcript_raw=str(artifact_plan.transcript_raw),
-                transcript_segments=str(artifact_plan.transcript_segments),
-                transcript_clean=str(artifact_plan.transcript_clean),
-                prompt_used=str(artifact_plan.prompt_used),
-                llm_response_raw=str(artifact_plan.llm_response_raw),
-                report_markdown=str(artifact_plan.report_markdown),
-                report_pdf=str(artifact_plan.report_pdf),
+                root_dir=artifact_plan.root_dir,
+                metadata_json=artifact_plan.metadata_json,
+                pipeline_log=artifact_plan.pipeline_log,
+                audio_extracted=artifact_plan.audio_extracted,
+                audio_normalized=artifact_plan.audio_normalized,
+                transcript_raw=artifact_plan.transcript_raw,
+                transcript_segments=artifact_plan.transcript_segments,
+                transcript_clean=artifact_plan.transcript_clean,
+                prompt_used=artifact_plan.prompt_used,
+                llm_response_raw=artifact_plan.llm_response_raw,
+                report_markdown=artifact_plan.report_markdown,
+                report_pdf=artifact_plan.report_pdf,
             ),
             workflow=self._build_workflow_metadata(
                 template_name=template_name,
@@ -121,16 +122,17 @@ class ArtifactPlanner:
         language: str | None,
         selected_stages: tuple[PipelineStage, ...],
     ) -> PipelineMetadata:
-        return replace(
-            metadata,
-            workflow=self._build_workflow_metadata(
-                template_name=template_name,
-                llm_provider=llm_provider,
-                llm_model=llm_model,
-                output_format=output_format,
-                language=language,
-                selected_stages=selected_stages,
-            ),
+        return metadata.model_copy(
+            update={
+                "workflow": self._build_workflow_metadata(
+                    template_name=template_name,
+                    llm_provider=llm_provider,
+                    llm_model=llm_model,
+                    output_format=output_format,
+                    language=language,
+                    selected_stages=selected_stages,
+                )
+            }
         )
 
     def initialize_log(self, artifact_root: Path, *, metadata_schema_version: int) -> None:
@@ -176,16 +178,17 @@ class ArtifactPlanner:
     ) -> PipelineMetadata:
         now = self._now()
         current = metadata.stages[stage]
-        updated_stage = replace(
-            current,
-            status=PipelineStageStatus.RUNNING,
-            resumable=False,
-            started_at=now,
-            finished_at=None,
-            updated_at=now,
-            error=None,
+        updated_stage = current.model_copy(
+            update={
+                "status": PipelineStageStatus.RUNNING,
+                "resumable": False,
+                "started_at": now,
+                "finished_at": None,
+                "updated_at": now,
+                "error": None,
+            }
         )
-        return replace(metadata, stages={**metadata.stages, stage: updated_stage})
+        return metadata.model_copy(update={"stages": {**metadata.stages, stage: updated_stage}})
 
     def mark_stage_completed(
         self,
@@ -195,16 +198,17 @@ class ArtifactPlanner:
     ) -> PipelineMetadata:
         now = self._now()
         current = metadata.stages[stage]
-        updated_stage = replace(
-            current,
-            status=PipelineStageStatus.COMPLETED,
-            resumable=True,
-            started_at=current.started_at or now,
-            finished_at=now,
-            updated_at=now,
-            error=None,
+        updated_stage = current.model_copy(
+            update={
+                "status": PipelineStageStatus.COMPLETED,
+                "resumable": True,
+                "started_at": current.started_at or now,
+                "finished_at": now,
+                "updated_at": now,
+                "error": None,
+            }
         )
-        return replace(metadata, stages={**metadata.stages, stage: updated_stage})
+        return metadata.model_copy(update={"stages": {**metadata.stages, stage: updated_stage}})
 
     def mark_stage_failed(
         self,
@@ -215,16 +219,17 @@ class ArtifactPlanner:
     ) -> PipelineMetadata:
         now = self._now()
         current = metadata.stages[stage]
-        updated_stage = replace(
-            current,
-            status=PipelineStageStatus.FAILED,
-            resumable=True,
-            started_at=current.started_at or now,
-            finished_at=now,
-            updated_at=now,
-            error=error,
+        updated_stage = current.model_copy(
+            update={
+                "status": PipelineStageStatus.FAILED,
+                "resumable": True,
+                "started_at": current.started_at or now,
+                "finished_at": now,
+                "updated_at": now,
+                "error": error,
+            }
         )
-        return replace(metadata, stages={**metadata.stages, stage: updated_stage})
+        return metadata.model_copy(update={"stages": {**metadata.stages, stage: updated_stage}})
 
     def record_transcription(
         self,
@@ -233,19 +238,20 @@ class ArtifactPlanner:
         result: TranscriptionResult,
         completed_at: str | None = None,
     ) -> PipelineMetadata:
-        return replace(
-            metadata,
-            transcription=PipelineTranscriptionMetadata(
-                provider=result.provider,
-                model=result.model,
-                requested_language=result.requested_language,
-                detected_language=result.detected_language,
-                duration_ms=result.duration_ms,
-                completed_at=completed_at or self._now(),
-                device_preference=result.device_preference,
-                effective_device=result.effective_device,
-                device_fallback_reason=result.device_fallback_reason,
-            ),
+        return metadata.model_copy(
+            update={
+                "transcription": PipelineTranscriptionMetadata(
+                    provider=result.provider,
+                    model=result.model,
+                    requested_language=result.requested_language,
+                    detected_language=result.detected_language,
+                    duration_ms=result.duration_ms,
+                    completed_at=completed_at or self._now(),
+                    device_preference=result.device_preference,
+                    effective_device=result.effective_device,
+                    device_fallback_reason=result.device_fallback_reason,
+                )
+            }
         )
 
     @staticmethod
@@ -325,9 +331,8 @@ class ArtifactRootValidator:
                 f"for '{source.path.name}'."
             )
 
-        artifact_metadata = metadata.artifacts.to_payload()
         for field_name, expected_path in expected_paths.items():
-            persisted_path = Path(str(artifact_metadata[field_name]))
+            persisted_path = getattr(metadata.artifacts, field_name)
             if persisted_path != expected_path:
                 raise ArtifactMetadataError(
                     f"Artifact metadata path mismatch for '{field_name}': "
@@ -362,8 +367,8 @@ class ArtifactRootValidator:
             ) from exc
 
         try:
-            result = TranscriptionResult.from_artifact_payload(payload)
-        except (KeyError, TypeError, ValueError) as exc:
+            result = TranscriptionResult.model_validate(payload)
+        except (KeyError, TypeError, ValueError, ValidationError) as exc:
             raise ArtifactMetadataError(
                 "Stage 'transcribe' is marked completed but "
                 "'transcript_segments.json' does not match the structured contract."

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 
 from media_report.application.reporting.models import PreparedPromptRun, RenderPromptRequest
@@ -127,7 +126,6 @@ def _reset_report_stage_to_planned(metadata: PipelineMetadata) -> PipelineMetada
         updated_at=current.updated_at,
         error=None,
     )
-    return replace(
-        metadata,
-        stages={**metadata.stages, PipelineStage.REPORT: planned_stage},
+    return metadata.model_copy(
+        update={"stages": {**metadata.stages, PipelineStage.REPORT: planned_stage}}
     )

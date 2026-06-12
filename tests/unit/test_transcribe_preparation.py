@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -113,16 +112,20 @@ def write_extract_only_artifacts(media_path: Path, *, delete_source: bool = Fals
             PipelineStage.TRANSCRIBE,
         ),
     )
-    metadata = replace(
-        metadata,
-        stages={
-            **metadata.stages,
-            PipelineStage.EXTRACT_AUDIO: replace(
-                metadata.stages[PipelineStage.EXTRACT_AUDIO],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-        },
+    metadata = metadata.model_copy(
+        update={
+            "stages": {
+                **metadata.stages,
+                PipelineStage.EXTRACT_AUDIO: metadata.stages[
+                    PipelineStage.EXTRACT_AUDIO
+                ].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+            }
+        }
     )
     artifact_plan.audio_extracted.write_text("audio", encoding="utf-8")
     JsonPipelineMetadataRepository().write(metadata)
@@ -140,7 +143,7 @@ def test_prepare_media_file_bootstraps_new_run(tmp_path: Path) -> None:
 
     assert run.source.path == media_path
     assert run.artifacts.root_dir.exists()
-    assert run.metadata.artifacts.root_dir == str(run.artifacts.root_dir)
+    assert run.metadata.artifacts.root_dir == run.artifacts.root_dir
     assert run.stage_decisions[0].stage == PipelineStage.EXTRACT_AUDIO
 
 
@@ -212,7 +215,7 @@ def test_prepare_artifact_root_fails_when_source_path_and_root_do_not_match(tmp_
     invalid_root = tmp_path / "wrong_media_report"
     invalid_root.mkdir()
     (invalid_root / "metadata.json").write_text(
-        json.dumps(metadata.to_payload(), indent=2),
+        json.dumps(metadata.model_dump(mode="json"), indent=2),
         encoding="utf-8",
     )
 

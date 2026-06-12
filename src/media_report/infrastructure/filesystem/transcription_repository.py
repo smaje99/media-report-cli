@@ -19,8 +19,16 @@ class JsonTranscriptionArtifactRepository:
     ) -> None:
         try:
             transcript_raw_path.write_text(f"{result.raw_text}\n", encoding="utf-8")
+            payload = result.model_dump(mode="json")
+            payload.pop("duration_ms", None)
+            payload.pop("device_preference", None)
+            payload.pop("effective_device", None)
+            payload.pop("device_fallback_reason", None)
+            for segment in payload["segments"]:
+                if segment.get("confidence") is None:
+                    segment.pop("confidence", None)
             transcript_segments_path.write_text(
-                json.dumps(result.to_artifact_payload(), indent=2),
+                json.dumps(payload, indent=2),
                 encoding="utf-8",
             )
         except (OSError, TypeError, ValueError) as exc:

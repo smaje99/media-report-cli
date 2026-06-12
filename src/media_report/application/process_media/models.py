@@ -1,14 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict
 
 from media_report.domain.artifacts.entities import ArtifactPlan, PipelineMetadata, StageDecision
 from media_report.domain.media.entities import MediaSource
 
 
-@dataclass(frozen=True)
-class ProcessRequest:
+class ProcessRequest(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     input_path: Path
     recursive: bool = False
     overwrite: bool = False
@@ -23,8 +25,9 @@ class ProcessRequest:
     output_format: str = "pdf"
 
 
-@dataclass(frozen=True)
-class ProcessPlanItem:
+class ProcessPlanItem(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     source: MediaSource
     artifacts: ArtifactPlan
     template_name: str
@@ -32,7 +35,8 @@ class ProcessPlanItem:
     final_metadata: PipelineMetadata
 
 
-@dataclass(frozen=True)
-class ProcessPlan:
+class ProcessPlan(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     items: tuple[ProcessPlanItem, ...]
     remote_provider_selected: bool

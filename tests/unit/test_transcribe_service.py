@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -170,16 +169,20 @@ def write_extract_only_artifacts(media_path: Path) -> Path:
             PipelineStage.TRANSCRIBE,
         ),
     )
-    metadata = replace(
-        metadata,
-        stages={
-            **metadata.stages,
-            PipelineStage.EXTRACT_AUDIO: replace(
-                metadata.stages[PipelineStage.EXTRACT_AUDIO],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-        },
+    metadata = metadata.model_copy(
+        update={
+            "stages": {
+                **metadata.stages,
+                PipelineStage.EXTRACT_AUDIO: metadata.stages[
+                    PipelineStage.EXTRACT_AUDIO
+                ].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+            }
+        }
     )
     artifact_plan.audio_extracted.write_text("audio", encoding="utf-8")
     JsonPipelineMetadataRepository().write(metadata)

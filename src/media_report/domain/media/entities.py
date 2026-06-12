@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
+from typing import Annotated
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MediaKind(StrEnum):
@@ -10,27 +12,31 @@ class MediaKind(StrEnum):
     VIDEO = "video"
 
 
-@dataclass(frozen=True)
-class MediaSource:
+class MediaSource(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     path: Path
     kind: MediaKind
 
 
-@dataclass(frozen=True)
-class ExtractAudioRequest:
+class ExtractAudioRequest(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     source: MediaSource
     output_path: Path
 
 
-@dataclass(frozen=True)
-class NormalizeAudioRequest:
+class NormalizeAudioRequest(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     source_path: Path
     output_path: Path
 
 
-@dataclass(frozen=True)
-class MediaProcessingResult:
+class MediaProcessingResult(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     output_path: Path
     command: tuple[str, ...]
-    duration_ms: int
+    duration_ms: Annotated[int, Field(ge=0)]
     stderr_summary: str | None

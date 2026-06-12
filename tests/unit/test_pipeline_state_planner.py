@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -69,26 +68,34 @@ def test_plan_resume_reuses_completed_stages_and_plans_tail(tmp_path: Path) -> N
     validator = ArtifactRootValidator()
     planner = PipelineStatePlanner()
 
-    metadata = replace(
-        metadata,
-        stages={
-            **metadata.stages,
-            PipelineStage.EXTRACT_AUDIO: replace(
-                metadata.stages[PipelineStage.EXTRACT_AUDIO],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-            PipelineStage.NORMALIZE_AUDIO: replace(
-                metadata.stages[PipelineStage.NORMALIZE_AUDIO],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-            PipelineStage.TRANSCRIBE: replace(
-                metadata.stages[PipelineStage.TRANSCRIBE],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-        },
+    metadata = metadata.model_copy(
+        update={
+            "stages": {
+                **metadata.stages,
+                PipelineStage.EXTRACT_AUDIO: metadata.stages[
+                    PipelineStage.EXTRACT_AUDIO
+                ].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+                PipelineStage.NORMALIZE_AUDIO: metadata.stages[
+                    PipelineStage.NORMALIZE_AUDIO
+                ].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+                PipelineStage.TRANSCRIBE: metadata.stages[PipelineStage.TRANSCRIBE].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+            }
+        }
     )
     artifact_plan.audio_extracted.write_text("audio", encoding="utf-8")
     artifact_plan.audio_normalized.write_text("audio", encoding="utf-8")
@@ -131,26 +138,34 @@ def test_plan_resume_can_force_rerun_completed_stage(tmp_path: Path) -> None:
     validator = ArtifactRootValidator()
     planner = PipelineStatePlanner()
 
-    metadata = replace(
-        metadata,
-        stages={
-            **metadata.stages,
-            PipelineStage.EXTRACT_AUDIO: replace(
-                metadata.stages[PipelineStage.EXTRACT_AUDIO],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-            PipelineStage.NORMALIZE_AUDIO: replace(
-                metadata.stages[PipelineStage.NORMALIZE_AUDIO],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-            PipelineStage.TRANSCRIBE: replace(
-                metadata.stages[PipelineStage.TRANSCRIBE],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-        },
+    metadata = metadata.model_copy(
+        update={
+            "stages": {
+                **metadata.stages,
+                PipelineStage.EXTRACT_AUDIO: metadata.stages[
+                    PipelineStage.EXTRACT_AUDIO
+                ].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+                PipelineStage.NORMALIZE_AUDIO: metadata.stages[
+                    PipelineStage.NORMALIZE_AUDIO
+                ].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+                PipelineStage.TRANSCRIBE: metadata.stages[PipelineStage.TRANSCRIBE].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+            }
+        }
     )
     artifact_plan.audio_extracted.write_text("audio", encoding="utf-8")
     artifact_plan.audio_normalized.write_text("audio", encoding="utf-8")
@@ -184,16 +199,18 @@ def test_validator_rejects_completed_stage_without_outputs(tmp_path: Path) -> No
     media_path, artifact_plan, metadata = build_metadata(tmp_path)
     validator = ArtifactRootValidator()
 
-    metadata = replace(
-        metadata,
-        stages={
-            **metadata.stages,
-            PipelineStage.TRANSCRIBE: replace(
-                metadata.stages[PipelineStage.TRANSCRIBE],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-        },
+    metadata = metadata.model_copy(
+        update={
+            "stages": {
+                **metadata.stages,
+                PipelineStage.TRANSCRIBE: metadata.stages[PipelineStage.TRANSCRIBE].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+            }
+        }
     )
 
     with pytest.raises(ArtifactMetadataError, match="required artifacts are missing"):
@@ -210,16 +227,18 @@ def test_validator_rejects_completed_transcription_with_legacy_segments_shape(
     media_path, artifact_plan, metadata = build_metadata(tmp_path)
     validator = ArtifactRootValidator()
 
-    metadata = replace(
-        metadata,
-        stages={
-            **metadata.stages,
-            PipelineStage.TRANSCRIBE: replace(
-                metadata.stages[PipelineStage.TRANSCRIBE],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-        },
+    metadata = metadata.model_copy(
+        update={
+            "stages": {
+                **metadata.stages,
+                PipelineStage.TRANSCRIBE: metadata.stages[PipelineStage.TRANSCRIBE].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+            }
+        }
     )
     artifact_plan.transcript_raw.write_text("transcript", encoding="utf-8")
     artifact_plan.transcript_segments.write_text("[]", encoding="utf-8")

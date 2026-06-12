@@ -1,5 +1,4 @@
 import json
-from dataclasses import replace
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -132,27 +131,35 @@ def write_resume_ready_metadata(media_path: Path) -> Path:
         language=None,
         selected_stages=tuple(PipelineStage),
     )
-    completed_stage = replace(
-        metadata.stages[PipelineStage.TRANSCRIBE],
-        status=PipelineStageStatus.COMPLETED,
-        finished_at=metadata.generated_at,
+    completed_stage = metadata.stages[PipelineStage.TRANSCRIBE].model_copy(
+        update={
+            "status": PipelineStageStatus.COMPLETED,
+            "finished_at": metadata.generated_at,
+        }
     )
-    metadata = replace(
-        metadata,
-        stages={
-            **metadata.stages,
-            PipelineStage.EXTRACT_AUDIO: replace(
-                metadata.stages[PipelineStage.EXTRACT_AUDIO],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-            PipelineStage.NORMALIZE_AUDIO: replace(
-                metadata.stages[PipelineStage.NORMALIZE_AUDIO],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-            PipelineStage.TRANSCRIBE: completed_stage,
-        },
+    metadata = metadata.model_copy(
+        update={
+            "stages": {
+                **metadata.stages,
+                PipelineStage.EXTRACT_AUDIO: metadata.stages[
+                    PipelineStage.EXTRACT_AUDIO
+                ].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+                PipelineStage.NORMALIZE_AUDIO: metadata.stages[
+                    PipelineStage.NORMALIZE_AUDIO
+                ].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+                PipelineStage.TRANSCRIBE: completed_stage,
+            }
+        }
     )
     JsonPipelineMetadataRepository().write(metadata)
     planner.initialize_log(artifact_plan.root_dir, metadata_schema_version=metadata.schema_version)
@@ -608,16 +615,20 @@ def test_process_resume_executes_only_normalize_when_extract_is_completed(
         language=None,
         selected_stages=tuple(PipelineStage),
     )
-    metadata = replace(
-        metadata,
-        stages={
-            **metadata.stages,
-            PipelineStage.EXTRACT_AUDIO: replace(
-                metadata.stages[PipelineStage.EXTRACT_AUDIO],
-                status=PipelineStageStatus.COMPLETED,
-                finished_at=metadata.generated_at,
-            ),
-        },
+    metadata = metadata.model_copy(
+        update={
+            "stages": {
+                **metadata.stages,
+                PipelineStage.EXTRACT_AUDIO: metadata.stages[
+                    PipelineStage.EXTRACT_AUDIO
+                ].model_copy(
+                    update={
+                        "status": PipelineStageStatus.COMPLETED,
+                        "finished_at": metadata.generated_at,
+                    }
+                ),
+            }
+        }
     )
     JsonPipelineMetadataRepository().write(metadata)
     planner.initialize_log(artifact_plan.root_dir, metadata_schema_version=metadata.schema_version)

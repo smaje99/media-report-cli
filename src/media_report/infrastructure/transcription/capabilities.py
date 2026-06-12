@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import importlib
-from dataclasses import dataclass
 from types import ModuleType
+
+from pydantic import BaseModel, ConfigDict
 
 from media_report.core.errors import OptionalDependencyMissingError
 
@@ -12,8 +13,9 @@ TRANSCRIPTION_INSTALL_HINT = (
 )
 
 
-@dataclass(frozen=True)
-class TranscriptionCapability:
+class TranscriptionCapability(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
     provider: str
     available: bool
     detail: str
