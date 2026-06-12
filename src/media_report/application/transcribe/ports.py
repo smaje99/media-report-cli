@@ -6,7 +6,7 @@ from media_report.application.transcribe.models import TranscribeRequest, Transc
 
 
 class TranscribeUseCase(Protocol):
-    """Application contract for transcript artifact generation."""
+  """Application contract for transcript artifact generation."""
 
-    def transcribe(self, request: TranscribeRequest) -> TranscribeResult:
-        """Execute the transcription workflow for a single input."""
+  def transcribe(self, request: TranscribeRequest) -> TranscribeResult:
+    """Execute the transcription workflow for a single input."""

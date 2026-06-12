@@ -5,92 +5,92 @@ import pytest
 
 from media_report.core.errors import ArtifactMetadataError
 from media_report.domain.artifacts.entities import (
-    PipelineStage,
-    PipelineStageStatus,
-    PipelineTranscriptionMetadata,
+  PipelineStage,
+  PipelineStageStatus,
+  PipelineTranscriptionMetadata,
 )
 from media_report.domain.artifacts.service import ArtifactPlanner
 from media_report.domain.media.entities import MediaKind, MediaSource
 from media_report.infrastructure.filesystem.metadata_repository import (
-    JsonPipelineMetadataRepository,
+  JsonPipelineMetadataRepository,
 )
 
 
 def test_metadata_repository_round_trip_v2(tmp_path: Path) -> None:
-    media_path = tmp_path / "meeting.mp3"
-    media_path.write_text("x", encoding="utf-8")
-    planner = ArtifactPlanner()
-    artifact_plan = planner.prepare_new(media_path)
-    metadata = planner.bootstrap_metadata(
-        source=MediaSource(path=media_path, kind=MediaKind.AUDIO),
-        artifact_plan=artifact_plan,
-        template_name="generic",
-        llm_provider="ollama",
-        llm_model="llama3.1",
-        output_format="pdf",
-        language=None,
-        selected_stages=(PipelineStage.REPORT, PipelineStage.PDF),
-    )
-    metadata = metadata.model_copy(
-        update={
-            "transcription": PipelineTranscriptionMetadata(
-                provider="stub",
-                model="stub-small",
-                requested_language="es",
-                detected_language="es",
-                duration_ms=123,
-                completed_at=metadata.generated_at,
-                device_preference="auto",
-                effective_device="cpu",
-                device_fallback_reason="auto fallback to 'cpu' after cuda: unavailable",
-            )
-        }
-    )
+  media_path = tmp_path / "meeting.mp3"
+  media_path.write_text("x", encoding="utf-8")
+  planner = ArtifactPlanner()
+  artifact_plan = planner.prepare_new(media_path)
+  metadata = planner.bootstrap_metadata(
+    source=MediaSource(path=media_path, kind=MediaKind.AUDIO),
+    artifact_plan=artifact_plan,
+    template_name="generic",
+    llm_provider="ollama",
+    llm_model="llama3.1",
+    output_format="pdf",
+    language=None,
+    selected_stages=(PipelineStage.REPORT, PipelineStage.PDF),
+  )
+  metadata = metadata.model_copy(
+    update={
+      "transcription": PipelineTranscriptionMetadata(
+        provider="stub",
+        model="stub-small",
+        requested_language="es",
+        detected_language="es",
+        duration_ms=123,
+        completed_at=metadata.generated_at,
+        device_preference="auto",
+        effective_device="cpu",
+        device_fallback_reason="auto fallback to 'cpu' after cuda: unavailable",
+      )
+    }
+  )
 
-    repository = JsonPipelineMetadataRepository()
-    repository.write(metadata)
+  repository = JsonPipelineMetadataRepository()
+  repository.write(metadata)
 
-    loaded = repository.read(artifact_plan.metadata_json)
+  loaded = repository.read(artifact_plan.metadata_json)
 
-    assert loaded == metadata
-    assert loaded.stages[PipelineStage.REPORT].status == PipelineStageStatus.PLANNED
-    assert loaded.stages[PipelineStage.TRANSCRIBE].status == PipelineStageStatus.SKIPPED
-    assert loaded.transcription is not None
-    assert loaded.transcription.duration_ms == 123
-    assert loaded.transcription.effective_device == "cpu"
+  assert loaded == metadata
+  assert loaded.stages[PipelineStage.REPORT].status == PipelineStageStatus.PLANNED
+  assert loaded.stages[PipelineStage.TRANSCRIBE].status == PipelineStageStatus.SKIPPED
+  assert loaded.transcription is not None
+  assert loaded.transcription.duration_ms == 123
+  assert loaded.transcription.effective_device == "cpu"
 
 
 def test_metadata_repository_rejects_non_v2_schema(tmp_path: Path) -> None:
-    metadata_path = tmp_path / "metadata.json"
-    metadata_path.write_text('{"schema_version": 1}', encoding="utf-8")
+  metadata_path = tmp_path / "metadata.json"
+  metadata_path.write_text('{"schema_version": 1}', encoding="utf-8")
 
-    repository = JsonPipelineMetadataRepository()
+  repository = JsonPipelineMetadataRepository()
 
-    with pytest.raises(ArtifactMetadataError, match="Invalid artifact metadata"):
-        repository.read(metadata_path)
+  with pytest.raises(ArtifactMetadataError, match="Invalid artifact metadata"):
+    repository.read(metadata_path)
 
 
 def test_metadata_repository_reads_v2_payload_without_transcription_block(tmp_path: Path) -> None:
-    media_path = tmp_path / "meeting.mp3"
-    media_path.write_text("x", encoding="utf-8")
-    planner = ArtifactPlanner()
-    artifact_plan = planner.prepare_new(media_path)
-    metadata = planner.bootstrap_metadata(
-        source=MediaSource(path=media_path, kind=MediaKind.AUDIO),
-        artifact_plan=artifact_plan,
-        template_name="generic",
-        llm_provider="ollama",
-        llm_model="llama3.1",
-        output_format="pdf",
-        language=None,
-        selected_stages=(PipelineStage.REPORT, PipelineStage.PDF),
-    )
-    payload = metadata.model_dump(mode="json")
-    payload.pop("transcription")
-    artifact_plan.metadata_json.write_text(json.dumps(payload), encoding="utf-8")
+  media_path = tmp_path / "meeting.mp3"
+  media_path.write_text("x", encoding="utf-8")
+  planner = ArtifactPlanner()
+  artifact_plan = planner.prepare_new(media_path)
+  metadata = planner.bootstrap_metadata(
+    source=MediaSource(path=media_path, kind=MediaKind.AUDIO),
+    artifact_plan=artifact_plan,
+    template_name="generic",
+    llm_provider="ollama",
+    llm_model="llama3.1",
+    output_format="pdf",
+    language=None,
+    selected_stages=(PipelineStage.REPORT, PipelineStage.PDF),
+  )
+  payload = metadata.model_dump(mode="json")
+  payload.pop("transcription")
+  artifact_plan.metadata_json.write_text(json.dumps(payload), encoding="utf-8")
 
-    repository = JsonPipelineMetadataRepository()
-    loaded = repository.read(artifact_plan.metadata_json)
+  repository = JsonPipelineMetadataRepository()
+  loaded = repository.read(artifact_plan.metadata_json)
 
-    assert loaded.transcription is None
-    assert loaded.workflow.template_name == "generic"
+  assert loaded.transcription is None
+  assert loaded.workflow.template_name == "generic"

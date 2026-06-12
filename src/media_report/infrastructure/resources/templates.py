@@ -5,5 +5,5 @@ from media_report.domain.reporting.ports import PromptTemplateRepository
 
 
 class PackagePromptTemplateRepository(PromptTemplateRepository):
-    def get_template(self, name: str) -> str:
-        return load_prompt_template(name)
+  def get_template(self, name: str) -> str:
+    return load_prompt_template(name)

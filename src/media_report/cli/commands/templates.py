@@ -11,15 +11,15 @@ templates_app = typer.Typer(help="Inspect bundled templates.")
 
 @templates_app.command("list")
 def templates_list() -> None:
-    """List bundled prompt and PDF templates available from package resources."""
-    table = Table(title="Bundled Templates")
-    table.add_column("Type")
-    table.add_column("Name")
+  """List bundled prompt and PDF templates available from package resources."""
+  table = Table(title="Bundled Templates")
+  table.add_column("Type")
+  table.add_column("Name")
 
-    for name in list_prompt_templates():
-        table.add_row("prompt", name)
+  for name in list_prompt_templates():
+    table.add_row("prompt", name)
 
-    for name in list_pdf_templates():
-        table.add_row("pdf", name)
+  for name in list_pdf_templates():
+    table.add_row("pdf", name)
 
-    console.print(table)
+  console.print(table)

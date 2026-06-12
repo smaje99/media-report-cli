@@ -6,7 +6,7 @@ from media_report.application.reporting.models import RenderPromptRequest, Rende
 
 
 class PromptRenderUseCase(Protocol):
-    """Application contract for prompt rendering over existing artifacts."""
+  """Application contract for prompt rendering over existing artifacts."""
 
-    def render_prompt(self, request: RenderPromptRequest) -> RenderPromptResult:
-        """Render and persist a reporting prompt for a single artifact root."""
+  def render_prompt(self, request: RenderPromptRequest) -> RenderPromptResult:
+    """Render and persist a reporting prompt for a single artifact root."""

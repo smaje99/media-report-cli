@@ -79,6 +79,7 @@ include = [
 packages = ["src/media_report"]
 
 [tool.ruff]
+indent-width = 2
 line-length = 100
 target-version = "py311"
 
