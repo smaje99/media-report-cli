@@ -1,3 +1,8 @@
+---
+name: project-planning
+description: Break feature work into phases, backlog items, acceptance criteria, risks, and implementation steps. Use when planning new features, re-scoping releases, or turning large requests into actionable engineering work.
+---
+
 # Project Planning
 
 ## Goal

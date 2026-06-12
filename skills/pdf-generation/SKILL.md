@@ -1,3 +1,8 @@
+---
+name: pdf-generation
+description: Generate PDFs from report Markdown through Pandoc and LaTeX while preserving source artifacts. Use when adding PDF rendering, troubleshooting LaTeX engines, or refining PDF template behavior.
+---
+
 # PDF Generation
 
 ## Goal

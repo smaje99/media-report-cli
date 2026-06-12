@@ -1,3 +1,8 @@
+---
+name: pypi-packaging
+description: Keep the project aligned with PyPI distribution requirements. Use when editing pyproject metadata, package data, entry points, dependency declarations, or install-time packaging behavior.
+---
+
 # PyPI Packaging
 
 ## Goal

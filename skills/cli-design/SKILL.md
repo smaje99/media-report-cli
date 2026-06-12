@@ -1,3 +1,8 @@
+---
+name: cli-design
+description: Design or refine stable Typer commands, flags, help text, and Rich output for the media-report CLI. Use when adding commands, changing options or defaults, or improving user-facing errors and CLI behavior.
+---
+
 # CLI Design
 
 ## Goal

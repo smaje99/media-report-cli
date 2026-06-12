@@ -1,3 +1,8 @@
+---
+name: transcription-provider
+description: Add or modify adapters behind the TranscriptionProvider port. Use when introducing transcription backends, adjusting transcript persistence, or changing provider capability behavior.
+---
+
 # Transcription Provider
 
 ## Goal

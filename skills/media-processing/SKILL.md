@@ -1,3 +1,8 @@
+---
+name: media-processing
+description: Work on FFmpeg-based media inspection, extraction, normalization, and failure handling for media-report. Use when changing source media processing, audio extraction, or subprocess command execution.
+---
+
 # Media Processing
 
 ## Goal

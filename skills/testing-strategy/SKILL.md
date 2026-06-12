@@ -1,3 +1,8 @@
+---
+name: testing-strategy
+description: Guide unit and integration coverage without coupling tests to heavyweight local dependencies. Use when adding test coverage, fixing regressions, or expanding public CLI behavior.
+---
+
 # Testing Strategy
 
 ## Goal

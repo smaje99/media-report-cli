@@ -1,3 +1,8 @@
+---
+name: report-template-design
+description: Create or revise prompt templates that produce structured Markdown reports. Use when adding report templates, changing prompt instructions, or aligning report structure across providers.
+---
+
 # Report Template Design
 
 ## Goal

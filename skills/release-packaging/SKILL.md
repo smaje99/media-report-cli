@@ -1,3 +1,8 @@
+---
+name: release-packaging
+description: Prepare repeatable release builds and installation validation for the CLI. Use when building distributions, fixing wheel or sdist issues, or validating install and execution paths.
+---
+
 # Release Packaging
 
 ## Goal

@@ -1,3 +1,8 @@
+---
+name: llm-provider
+description: Implement or refine report generation providers behind the LLMProvider port. Use when adding OpenAI-compatible providers, Ollama support, provider configuration, or prompt and artifact persistence behavior.
+---
+
 # LLM Provider
 
 ## Goal

@@ -1,3 +1,8 @@
+---
+name: hexagonal-architecture
+description: Preserve the project's hexagonal boundaries between CLI, application, domain, and infrastructure. Use when adding orchestration, introducing adapters, or refactoring workflow code around ports and domain rules.
+---
+
 # Hexagonal Architecture
 
 ## Goal
