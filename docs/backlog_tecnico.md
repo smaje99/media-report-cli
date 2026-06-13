@@ -973,7 +973,8 @@ Scenario: Transcribir archivo fuente desde comando dedicado
 
 ### Sprint 05 - Reporting core y `report.md`
 
-- Estado: parcial
+- Estado: hecho
+- Cerrado en: `2026-06-12T23:53:38-05:00`
 - Objetivo del sprint: convertir transcriptos válidos en `report.md` trazable, con prompt persistido, provider LLM operativo y una superficie pública `report` coherente con `process --only-report`.
 - Alcance:
   - render de prompt desde recursos empaquetados;
