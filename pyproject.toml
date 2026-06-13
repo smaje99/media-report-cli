@@ -29,7 +29,7 @@ classifiers = [
   "Topic :: Utilities",
 ]
 dependencies = [
-  "httpx==0.28.1",
+  "pydantic-ai-slim[openai]==1.22.0",
   "pydantic==2.13.4",
   "pydantic-settings==2.14.1",
   "rich==15.0.0",
