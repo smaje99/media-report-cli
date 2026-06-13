@@ -17,8 +17,9 @@ El backlog está organizado por épicas alineadas a `docs/context/roadmap.md` y 
   - `config init`
   - `config show`
   - `templates list`
-- Nuevos comandos públicos planificados:
+- Comandos públicos actuales adicionales:
   - `transcribe`
+- Nuevos comandos públicos planificados:
   - `report`
   - `clean`
 - Plataformas objetivo: Linux y macOS.
@@ -32,16 +33,16 @@ El backlog está organizado por épicas alineadas a `docs/context/roadmap.md` y 
 
 | Área | Estado actual confirmado | Estado objetivo del backlog | Tratamiento |
 | --- | --- | --- | --- |
-| CLI pública | Existen `process`, `doctor`, `config`, `templates` | Mantener compatibilidad y añadir `transcribe`, `report`, `clean` | Incremental, sin renombres |
-| `process` | Valida paths, descubre media, crea artefactos, escribe `metadata.json` y `pipeline.log` | Ejecutar pipeline completo hasta Markdown/PDF con reanudación por etapas | Evolución del comando existente |
-| FFmpeg | Hay builder de comando en `infrastructure/ffmpeg/service.py`, sin ejecución ni port dedicado | Extraer y normalizar audio desde aplicación a través de port/adaptador | Scaffolded, no cableado |
-| Transcripción | Existe `TranscriptionProvider`; `faster_whisper` solo levanta `NotImplementedError` | Transcribir audio, persistir texto crudo y segmentos, soportar `transcribe` | Scaffolded, no cableado |
+| CLI pública | Existen `process`, `transcribe`, `doctor`, `config`, `templates` | Mantener compatibilidad y añadir `report`, `clean` | Incremental, sin renombres |
+| `process` | Descubre media, crea/reutiliza artifacts, ejecuta hasta `transcribe`, escribe `metadata.json` y `pipeline.log` | Ejecutar pipeline completo hasta Markdown/PDF con reanudación por etapas | Evolución del comando existente |
+| FFmpeg | Hay port y adaptador operativos para extracción y normalización reales | Mantener la ejecución encapsulada y reutilizable por etapas | Ya cableado, extender sin romper |
+| Transcripción | Existe `TranscriptionProvider`; `faster-whisper` ya transcribe y persiste transcriptos | Mantener `transcribe` estable y preparar handoff a reporting | Ya cableado, extender sin romper |
 | Reporting LLM | Existen `LLMProvider`, `OllamaProvider`, `OpenAICompatibleProvider`; sin integración real | Renderizar prompt, llamar proveedor, persistir prompt/respuesta y producir `report.md` | Scaffolded, no cableado |
 | PDF | Existe builder de Pandoc; plantilla TeX empaquetada | Renderizar `report.pdf` desde `report.md` preservando Markdown ante fallos | Scaffolded, no cableado |
-| Configuración | Archivo TOML, env overrides, redacción de secretos, selección básica de proveedor/modelo | Configuración validada por etapa, perfiles de provider y warnings coherentes | Extender sin romper |
-| Metadata | `metadata.json` incluye source, artifacts, workflow y etapas `planned` | Metadata trazable con estados `planned/running/completed/failed/skipped`, timestamps y errores resumidos | Extensión de esquema |
+| Configuración | Archivo TOML, env overrides, redacción de secretos, selección básica de provider/modelo y device | Configuración validada por etapa, perfiles de provider y warnings coherentes | Extender sin romper |
+| Metadata | `metadata.json` v2 ya soporta etapas, transiciones y trazabilidad de transcripción | Metadata trazable completa hasta reporting/PDF sin romper compatibilidad | Extensión aditiva |
 | Recursos empaquetados | Templates Markdown y TeX se cargan por paquete | Mantener el contrato para instalación por wheel, sdist y tool install | Ya bien encaminado |
-| Tests | Unitarias para scanner, planner, settings y resources; integración CLI bootstrap | Cobertura por etapa, smoke tests instalados y fixtures realistas | Expandir |
+| Tests | Unitarias e integraciones para scanner, planner, settings, FFmpeg, transcripción y CLI pública actual | Cobertura por etapa, smoke tests instalados y heavy tests con evidencia | Expandir |
 | Release | Docs de release y packaging presentes | CI/CD, trusted publishing, TestPyPI/PyPI, smoke tests de instalación | Parcial, no automatizado |
 | Portfolio/docs | README y contexto técnico presentes | Demo, guía de extensibilidad, artículo técnico y ficha de portfolio | Pendiente |
 
@@ -53,7 +54,33 @@ El backlog está organizado por épicas alineadas a `docs/context/roadmap.md` y 
 - Fase 5 cierra prompting y reportes LLM, y expone `report`.
 - Fase 6 conecta renderizado PDF y hace que `process` sea un flujo end-to-end.
 - Fase 7 endurece distribución, CI/CD y validación de instalación.
-- Fase 8 se reserva para extensiones tardías; `clean` entra aquí si compite por capacidad con transcripción y reporting.
+- Fase 8 se reserva para `clean`, extensibilidad y demo técnica.
+- Fase 9 formaliza heavy tests y evidencia operativa con media real.
+- Fase 10 cierra documentación pública, docs site y activos de portfolio técnico.
+
+### Alineación con `docs/media-report-cli-roadmap.md`
+
+| Fase roadmap | Estado roadmap | Sprint backlog | Gap pendiente |
+| --- | --- | --- | --- |
+| Fase 0 | Cumplida | Sprint 01 | Ninguno relevante |
+| Fase 1 | Parcial | Sprint 09 | Evidencia consolidada de heavy tests |
+| Fase 2 | Mayormente cumplida | Sprint 02 | Completar separación final de artifacts de report/PDF |
+| Fase 3 | Parcial alto | Sprint 03 | Ninguno crítico; sostener compatibilidad |
+| Fase 4 | Mayormente cumplida | Sprint 04 | Ninguno crítico; sostener compatibilidad |
+| Fase 5 | Parcial | Sprint 05 | `report.md`, providers LLM reales y semántica final de `report` |
+| Fase 6 | Pendiente | Sprint 06 | `report.pdf` y preservación de Markdown ante fallos |
+| Fase 7 | Parcial | Sprint 07 | CI, smoke install, RC, TestPyPI/PyPI |
+| Fase 8 | Pendiente | Sprint 08 | `clean`, guía de extensibilidad y demo técnica |
+| Publicación técnica | Pendiente | Sprint 10 | docs site, caso de estudio y activos públicos |
+
+Brechas abiertas obligatorias que este backlog debe cubrir:
+
+- `report.md`
+- `report.pdf`
+- CI/TestPyPI/PyPI
+- demo/portfolio
+- guía de extensibilidad
+- evidencia de heavy tests
 
 ## Mapa de Sprints
 
@@ -63,12 +90,14 @@ El backlog está organizado por épicas alineadas a `docs/context/roadmap.md` y 
 | Sprint 02 | 2 | Días 15-28 | Reanudación y modelo de artefactos listos para pipeline real |
 | Sprint 03 | 3 | Días 29-42 | Extracción y normalización con FFmpeg |
 | Sprint 04 | 4 | Días 43-56 | Pipeline de transcripción y comando `transcribe` |
-| Sprint 05 | 5 | Días 57-70 | Prompting, LLM providers y comando `report` |
-| Sprint 06 | 6 | Días 71-84 | PDF, cierre end-to-end de `process` y fallos parciales |
-| Sprint 07 | 7 | Días 85-98 | Packaging hardening, CI/CD y publicación |
-| Sprint 08 | 8 | Días 99-112 | `clean`, extensibilidad, demo y activos de portfolio |
+| Sprint 05 | 5 | Días 57-70 | Reporting core, providers LLM y `report.md` |
+| Sprint 06 | 6 | Días 71-84 | PDF, cierre end-to-end de `process` y fallos parciales preservando Markdown |
+| Sprint 07 | 7 | Días 85-98 | Packaging hardening, CI/CD, release candidate y criterio go/no-go |
+| Sprint 08 | 8 | Días 99-112 | `clean`, extensibilidad y demo técnica |
+| Sprint 09 | 1 | Días 113-126 | Heavy tests y evidencia operativa con media real |
+| Sprint 10 | 8 | Días 127-140 | Publicación técnica, docs site y activos públicos |
 
-Los primeros seis sprints cubren el núcleo del roadmap de 90 días. Los sprints 07 y 08 quedan en el mismo backlog operativo porque dependen directamente de las decisiones técnicas anteriores.
+Los sprints 01 a 04 quedan como historial cerrado. Desde Sprint 05 en adelante el backlog ya no solo sigue `docs/context/roadmap.md`; también materializa las brechas que el roadmap público actualizado convirtió en obligaciones explícitas.
 
 ## Epic 01: Fases 0-1
 
@@ -616,7 +645,7 @@ Scenario: Procesar archivo y detenerse antes de transcribir
     - ejecutar `normalize_audio` solo cuando extracción termine correctamente o haya sido `reused`;
     - respetar decisiones `reused` y `skipped` generadas por `PipelineStatePlanner`;
     - persistir `audio_extracted.wav` y `audio_normalized.wav` en el artifact root;
-    - mantener `--only-transcribe` como ejecución hasta `normalize_audio`, dejando `transcribe` solo planificada;
+    - mantener `--only-transcribe` como ejecución hasta `normalize_audio`; en este sprint el comando dedicado `transcribe` todavía no formaba parte de la superficie pública cerrada;
     - mantener `--only-report` bloqueado para corridas nuevas y funcional solo con `--resume` y prerequisitos satisfechos;
     - preservar artefactos previos si falla `normalize_audio`, sin borrar `audio_extracted.wav`.
   - No funcional:
@@ -942,616 +971,395 @@ Scenario: Transcribir archivo fuente desde comando dedicado
 
 ## Epic 05: Fase 5
 
-### Sprint 05 - Prompting, LLM y comando `report`
+### Sprint 05 - Reporting core y `report.md`
 
-- Objetivo del sprint: producir `report.md` reproducible desde transcriptos y provider LLM configurado.
+- Estado: parcial
+- Objetivo del sprint: convertir transcriptos válidos en `report.md` trazable, con prompt persistido, provider LLM operativo y una superficie pública `report` coherente con `process --only-report`.
 - Alcance:
-  - renderizado de prompt desde recursos empaquetados;
-  - integración Ollama y OpenAI-compatible;
-  - comando `report`.
-  - preferencia por GPU en providers locales cuando la runtime la soporte.
+  - render de prompt desde recursos empaquetados;
+  - providers `ollama` y `openai-compatible`;
+  - persistencia de `prompt_used.md`, `llm_response_raw.txt` y `report.md`;
+  - caso de uso compartido para `report` y `process --only-report`.
 - Fuera de alcance:
-  - PDF;
-  - limpieza semántica avanzada si compite con el sprint;
-  - múltiples providers LLM adicionales.
+  - render PDF;
+  - `clean`;
+  - múltiples providers LLM adicionales;
+  - streaming y retries sofisticados.
 - Entregables:
-  - `prompt_used.md`, `llm_response_raw.txt`, `report.md`;
-  - warning de proveedor remoto;
-  - `media-report report`.
+  - `prompt_used.md` como evidencia obligatoria;
+  - `llm_response_raw.txt` y `report.md` como artifacts reales;
+  - comando público `media-report report`;
+  - warning remoto y redacción de secretos.
 - Dependencias: Sprint 04.
 - Riesgos:
-  - template context insuficiente;
-  - respuestas LLM no estructuradas;
-  - fuga accidental de secretos o headers.
-  - comportamiento opaco del runtime local si usa CPU pese a existir GPU y eso no queda trazado.
+  - respuestas LLM vacías o no útiles;
+  - divergencia funcional entre `report` y `process --only-report`;
+  - metadata inconsistente de la etapa `report`;
+  - fugas de secretos en errores o logs.
 - Criterio de salida:
-  - un transcripto válido puede convertirse en `report.md` desde CLI y también desde `process`.
-- Tareas transversales:
-  - mantener `metadata.json` en versión 2 con evolución aditiva;
-  - preservar la separación hexagonal entre CLI, aplicación, dominio e infraestructura;
-  - asegurar que `report` y `process --only-report` compartan el mismo caso de uso;
-  - persistir siempre `prompt_used.md`, `llm_response_raw.txt` y `report.md` como artefactos trazables;
-  - garantizar redacción de secretos en consola, logs, metadata y errores;
-  - emitir warning visible cuando el proveedor efectivo no sea local;
-  - documentar help text y README solo cuando cambie la superficie pública del comando.
-- Dependencias internas:
-  - reutilizar `ArtifactPlanner`, `ArtifactRootValidator`, `PipelineStatePlanner` y `JsonPipelineMetadataRepository`;
-  - reutilizar `PromptTemplateRepository` y `PackagePromptTemplateRepository` para carga por `importlib.resources`;
-  - extender el contrato `LLMProvider` sin filtrar detalles HTTP de infraestructura hacia dominio o aplicación;
-  - consumir `transcript_raw.txt` y `transcript_segments.json` como prerequisitos cerrados por Sprint 04;
-  - usar los campos actuales de `workflow.template_name`, `workflow.llm_provider`, `workflow.llm_model` y `workflow.output_format`.
-- Riesgos técnicos concretos:
-  - marcar `report` como `completed` si falta alguno de los tres artefactos obligatorios;
-  - divergencia funcional entre `media-report report` y `process --only-report`;
-  - acoplar render de prompts a rutas del repositorio en lugar de recursos empaquetados;
-  - persistir o loggear prompt/respuesta sin distinguir entre trazabilidad en artefactos y ruido en consola;
-  - filtrar `MEDIA_REPORT_OPENAI_API_KEY`, headers `Authorization` o query params sensibles en errores HTTP;
-  - aceptar respuestas LLM vacías o no Markdown como reportes válidos;
-  - hacer la suite frágil al depender de Ollama real o de APIs remotas.
-- Decisiones cerradas para el sprint:
-  - sin cambio de `schema_version`; se conserva `metadata.json` v2;
-  - providers reales del sprint: `ollama` y `openai-compatible`;
-  - proveedor por defecto: `ollama`;
-  - cualquier proveedor distinto de `ollama` requiere warning visible de procesamiento remoto;
-  - no se implementa streaming público ni retries sofisticados;
-  - `--overwrite` en `report` reejecuta solo la etapa `report`, no borra artefactos upstream;
-  - `process --only-report` requiere `--resume` o artifact root reusable con transcripción válida;
-  - PDF permanece planificado para Sprint 06.
-- Cambios importantes de interfaces y tipos:
-  - `LLMProvider` pasa de contrato mínimo de texto a contrato operativo con request/result tipados o equivalente;
-  - aparece un caso de uso de aplicación para reporting reutilizable desde CLI y `process`;
-  - `PipelineMetadata` conserva versión 2, pero puede sumar trazabilidad opcional de reporting;
-  - el validador de artifact root debe reconocer `prompt_used.md`, `llm_response_raw.txt` y `report.md` como outputs obligatorios de `report`;
-  - la CLI pública suma `media-report report` sin renombrar comandos existentes.
-- Escenarios de prueba de referencia:
-  - renderizar prompt determinista desde `transcript_raw.txt` y template `meeting`;
-  - fallar con template inexistente sin marcar `report` como `completed`;
-  - fallar cuando el artifact root no tiene transcripción válida;
-  - generar `llm_response_raw.txt` y `report.md` con provider Ollama mockeado;
-  - generar reporte con provider remoto mostrando warning y sin imprimir API key;
-  - fallar por timeout o HTTP error con mensaje redactado;
-  - reutilizar reporte completado cuando no se solicita `--overwrite`;
-  - reejecutar solo `report` con `--overwrite` preservando transcriptos;
-  - validar compatibilidad funcional entre `media-report report` y `process --only-report`;
-  - verificar que ninguna prueba depende de rutas relativas del repo ni de servicios externos reales.
+  - un artifact root con transcripción válida puede producir `report.md` desde CLI sin reejecutar etapas upstream.
 
 #### WI-05-01 - Servicio de render de prompt y contexto de reporte
 
 - Estado: hecho
 - Cerrado en: `2026-06-05T15:04:04-05:00`
-
 - Objetivo: convertir artefactos de transcripción en prompts deterministas y auditables.
-- Contexto técnico: los templates ya viven en `src/media_report/templates/prompts`, pero hoy solo se listan y validan por nombre.
-- Alcance funcional:
-  - definir contexto mínimo de prompt;
-  - persistir `prompt_used.md`;
-  - soportar plantillas `generic`, `meeting`, `interview`, `technical_report`, `class_notes`.
+- Contexto técnico: las templates viven en `src/media_report/templates/prompts` y ya existe `media_report.application.reporting` para preparación y ejecución del render.
+- Alcance:
+  - contexto mínimo de reporte;
+  - persistencia de `prompt_used.md`;
+  - soporte de templates empaquetadas.
 - No se tocará:
   - editor visual de prompts;
-  - plantillas remotas;
-  - parametrización arbitraria desde CLI más allá de opciones justificadas.
-- Cambios esperados de CLI/API/artefactos/config:
-  - `report` acepta `--template`;
-  - `metadata.json` guarda template efectivo y quizá hash de prompt;
-  - `prompt_used.md` se vuelve artefacto obligatorio de reporting.
-- Gherkin ampliado:
+  - templates remotas;
+  - llamadas HTTP a providers.
+- Cambios esperados:
+  - `prompt_used.md` se vuelve artifact obligatorio de reporting;
+  - `workflow.template_name` queda alineado con el render efectivo;
+  - sin cambio de `schema_version`.
+- Gherkin:
 
 ```gherkin
-Scenario: Generar prompt para template meeting
-  Given un transcripto y metadata válidos
-  When ejecuto la etapa de reporting con "--template meeting"
+Scenario: Generar prompt auditable desde artifact root
+  Given un artifact directory con transcripción válida
+  When renderizo el prompt con una template empaquetada
   Then se persiste "prompt_used.md"
-  And el prompt incorpora el contenido del transcripto y el contexto del archivo
-
-Scenario: Rechazar template inexistente sin completar report
-  Given un artifact directory con transcripción completada
-  When ejecuto la etapa de reporting con "--template inexistente"
-  Then el comando falla con un mensaje accionable
-  And no se marca la etapa "report" como completada
-  And no se sobrescribe un "prompt_used.md" previo válido
-
-Scenario: Bloquear reporting con transcripto vacío
-  Given un artifact directory con "transcript_raw.txt" vacío
-  When ejecuto la etapa de render de prompt
-  Then la etapa "report" queda en estado "failed"
-  And el error indica que la transcripción no es utilizable
-  And no se llama al proveedor LLM
-
-Scenario: Cargar template desde paquete instalado
-  Given la aplicación se ejecuta desde una instalación empaquetada
-  When renderizo el prompt con "--template technical_report"
-  Then la template se carga mediante recursos del paquete
-  And no se requiere una ruta relativa del repositorio
+  And el prompt incorpora contexto, template y transcripto
 ```
 
-- Happy path:
-  - prompt reproducible;
-  - template cargada desde paquete instalado;
-  - sin dependencia de paths del repo.
-- Bad paths:
-  - template inexistente;
-  - transcripto vacío;
-  - prompt excesivo sin control de tamaño.
-- Observabilidad/logging:
-  - registrar template seleccionada y tamaño del prompt;
-  - no loggear el prompt completo en consola.
-- Pruebas unitarias/integración:
-  - unitarias de carga de templates y render;
-  - integración `templates list` y `report` con template válida/inválida.
-- Criterio de aceptación:
-  - cualquier reporte puede auditar qué prompt exacto se usó.
-- Desglose de tareas:
-  - Arquitectura:
-    - definir un modelo de contexto de reporte con source, artifact root, workflow, transcripción y template efectivo;
-    - crear un servicio de render de prompt en aplicación o dominio sin dependencias HTTP;
-    - mantener la carga de templates detrás de `PromptTemplateRepository`;
-    - evitar que CLI lea archivos de transcripción o recursos empaquetados directamente;
-    - preparar el resultado del render para ser consumido por el futuro caso de uso de reporting.
-  - Negocio/valor:
-    - asegurar que cualquier reporte pueda ser auditado desde el prompt exacto usado;
-    - permitir iterar plantillas sin rehacer transcripción ni normalización;
-    - preservar trazabilidad para reuniones, entrevistas, clases y reportes técnicos.
-  - Funcional:
-    - leer `transcript_raw.txt` como contenido principal del prompt;
-    - validar que `transcript_segments.json` sigue siendo consistente con el transcripto crudo;
-    - incorporar en el prompt contexto mínimo del archivo fuente, template, idioma y metadata disponible;
-    - persistir `prompt_used.md` en el artifact root;
-    - calcular y persistir en metadata un hash o tamaño del prompt si se decide como dato de trazabilidad;
-    - rechazar templates desconocidas antes de llamar al proveedor LLM;
-    - rechazar transcriptos vacíos, inexistentes o inconsistentes.
-  - No funcional:
-    - cargar recursos exclusivamente mediante `importlib.resources`;
-    - no imprimir el prompt completo en consola;
-    - registrar template, tamaño y hash del prompt en `pipeline.log`;
-    - mantener comportamiento determinista para el mismo transcripto, template y contexto;
-    - evitar dependencias de red en esta WI.
-  - Pruebas:
-    - añadir unit tests de render determinista;
-    - añadir tests de template válida, template inexistente y lista de templates empaquetadas;
-    - añadir tests de transcripto vacío y artefactos inconsistentes;
-    - añadir test que pruebe que el repository de templates abstrae la carga de recursos;
-    - añadir integración mínima de `report` con provider fake solo hasta persistencia de `prompt_used.md` si el comando ya existe en la WI correspondiente.
-  - Documentación/aceptación:
-    - documentar que `prompt_used.md` es artefacto obligatorio de `report`;
-    - dejar claro que el prompt persistido es la fuente de auditoría, no la salida de consola;
-    - actualizar ayuda del comando cuando `--template` quede operativo.
+- Pruebas:
+  - unitarias de render determinista y carga de templates;
+  - casos de template inexistente y transcripto vacío;
+  - validación de `transcript_segments.json` inconsistente.
+- Checklist:
+  - [x] El render usa `importlib.resources`.
+  - [x] `prompt_used.md` se persiste.
+  - [x] La etapa falla de forma explícita si el transcripto no es utilizable.
+  - [x] No se imprime el prompt completo en consola.
+- Preguntas de cierre:
+  - [x] ¿La template efectiva queda trazada en metadata y log?
+  - [x] ¿El render sigue siendo reutilizable desde un caso de uso de reporting?
+
 - Resultado implementado:
-  - se creó `media_report.application.reporting` con el mismo patrón de separación usado en transcripción: `models`, `ports`, `preparation`, `execution` y `service`;
-  - `RenderPromptRequest`, `RenderPromptResult` y `PreparedPromptRun` modelan el caso de uso interno para renderizar prompts sobre artifact roots reutilizables;
-  - `PromptRunPreparer` acepta únicamente artifact directories existentes, valida `metadata.json`, verifica consistencia de `transcript_raw.txt` y `transcript_segments.json`, y actualiza `workflow.template_name` cuando llega override;
-  - `PromptRunExecutor` construye el prompt final mediante concatenación controlada de contexto, template empaquetada y transcripto, persistiendo `prompt_used.md` como evidencia auditable;
-  - la carga de templates sigue encapsulada detrás de `PromptTemplateRepository` y `PackagePromptTemplateRepository`, preservando el uso de `importlib.resources`;
-  - el flujo registra en `pipeline.log` la template efectiva y el tamaño del prompt, sin imprimir el prompt completo en consola;
-  - se añadieron errores tipados para prerequisitos, salida inválida y persistencia del prompt, con mensajería accionable y sin exponer secretos;
-  - la metadata mantiene trazabilidad mínima y aditiva: `workflow.template_name` queda alineado con el render efectivo, sin introducir una nueva versión de esquema;
-  - la etapa `report` no se marca como `completed` en este WI porque todavía no existen `llm_response_raw.txt` ni `report.md`, pero sí falla de forma explícita cuando el render o sus prerrequisitos son inválidos;
-  - la cobertura de pruebas valida render determinista, template inexistente, transcripto vacío, `transcript_segments.json` corrupto, persistencia de `prompt_used.md` y carga de templates empaquetadas desde instalación.
+  - `PromptRunPreparer` y `PromptRunExecutor` validan artifact roots reutilizables, construyen el contexto y persisten `prompt_used.md`;
+  - la carga de templates sigue encapsulada detrás de `PromptTemplateRepository`;
+  - la metadata mantiene trazabilidad aditiva sin marcar aún `report` como `completed`.
 
 #### WI-05-02 - Implementar providers LLM reales y redacción de secretos
 
-- Objetivo: soportar generación Markdown con un proveedor local y uno remoto compatible OpenAI.
-- Contexto técnico: existen `OllamaProvider` y `OpenAICompatibleProvider`, pero ambos están scaffolded.
-- Alcance funcional:
-  - implementar llamadas HTTP encapsuladas en infraestructura;
-  - soportar selección explícita por configuración o flag;
-  - mantener warning cuando `llm_provider != "ollama"`.
+- Estado: planificado
+- Objetivo: soportar generación Markdown con un provider local y uno remoto compatible OpenAI sin violar la política de secretos.
+- Contexto técnico: `OllamaProvider` y `OpenAICompatibleProvider` existen, pero siguen scaffolded.
+- Alcance:
+  - llamadas HTTP encapsuladas en infraestructura;
+  - selección explícita por config o override;
+  - persistencia de `llm_response_raw.txt`;
+  - warning visible cuando el provider efectivo no sea local.
 - No se tocará:
-  - streaming complejo;
+  - streaming público;
   - retries sofisticados;
-  - múltiples backends remotos adicionales.
-- Cambios esperados de CLI/API/artefactos/config:
-  - `MEDIA_REPORT_OPENAI_API_KEY` y base URLs usados de forma real;
-  - `doctor` puede detectar configuración incompleta;
-  - errores con provider/model sin imprimir tokens.
-- Gherkin ampliado:
+  - otros backends remotos.
+- Cambios esperados:
+  - uso real de `MEDIA_REPORT_OPENAI_API_KEY`, `MEDIA_REPORT_OPENAI_BASE_URL` y `MEDIA_REPORT_OLLAMA_BASE_URL`;
+  - `doctor` distingue provider local disponible, remoto incompleto o config inválida;
+  - errores redactados sin API keys, bearer tokens ni headers sensibles.
+- Gherkin:
 
 ```gherkin
 Scenario: Generar respuesta con Ollama local
-  Given una configuración con proveedor "ollama"
-  And un prompt persistido en "prompt_used.md"
-  When ejecuto la generación LLM con el modelo configurado
-  Then se llama al endpoint local de Ollama
-  And se persiste "llm_response_raw.txt"
+  Given un prompt persistido y proveedor "ollama"
+  When ejecuto la generación LLM
+  Then se persiste "llm_response_raw.txt"
   And la metadata registra provider y modelo efectivos
 
-Scenario: Generar reporte con proveedor remoto
-  Given una configuración "openai-compatible" válida
-  When ejecuto "media-report report artefactos --provider openai-compatible"
-  Then veo un warning sobre procesamiento remoto
-  And se genera "llm_response_raw.txt"
-  And nunca se imprime la API key
-
-Scenario: Fallar con API key ausente sin filtrar secretos
+Scenario: Fallar con provider remoto sin API key
   Given una configuración "openai-compatible" sin API key
-  When ejecuto la generación LLM remota
-  Then el comando falla con un mensaje accionable
-  And la etapa "report" queda en estado "failed"
-  And la salida no contiene valores de variables secretas
-
-Scenario: Rechazar respuesta vacía del proveedor
-  Given un proveedor LLM que devuelve una respuesta vacía
-  When ejecuto la generación de reporte
-  Then se persiste el fallo en metadata
-  And no se genera "report.md" como reporte válido
-  And "llm_response_raw.txt" conserva la respuesta cruda si existe
+  When ejecuto reporting
+  Then el comando falla con mensaje accionable
+  And la salida no contiene secretos
 ```
 
-- Happy path:
-  - Ollama local funciona por defecto;
-  - proveedor remoto funciona por opt-in explícito;
-  - respuesta cruda persistida.
-- Bad paths:
-  - API key ausente;
-  - timeout o HTTP error;
-  - salida vacía o no Markdown.
-- Observabilidad/logging:
-  - registrar provider, modelo, latencia y código HTTP resumido;
-  - redacción estricta de secretos.
-- Pruebas unitarias/integración:
+- Pruebas:
   - unitarias de adapters HTTP con `httpx` mockeado;
-  - tests de redacción de errores;
-  - integración CLI con proveedor fake local/remoto.
-- Criterio de aceptación:
-  - reporting real funciona sin violar la política de secretos.
-- Desglose de tareas:
-  - Arquitectura:
-    - evolucionar `LLMProvider` para aceptar un request tipado o mantener una firma mínima con resultado enriquecido, pero sin exponer detalles HTTP;
-    - mantener `OllamaProvider` y `OpenAICompatibleProvider` dentro de infraestructura;
-    - encapsular base URL, headers, timeouts y parsing de respuestas en cada adaptador;
-    - centralizar redacción de secretos para errores, logs y representaciones de config;
-    - preparar factories en bootstrap para seleccionar provider explícitamente.
-  - Negocio/valor:
-    - habilitar reporting local por defecto para preservar privacidad;
-    - permitir provider remoto solo por elección explícita del usuario;
-    - mantener evidencia cruda de la respuesta para trazabilidad y depuración.
-  - Funcional:
-    - implementar llamada HTTP a Ollama usando `ollama_base_url` y modelo efectivo;
-    - implementar llamada OpenAI-compatible usando `openai_base_url`, `MEDIA_REPORT_OPENAI_API_KEY` y modelo efectivo;
-    - persistir la respuesta cruda en `llm_response_raw.txt`;
-    - validar respuesta vacía, error HTTP, timeout y payload inesperado;
-    - mapear errores de provider a errores tipados del proyecto;
-    - emitir warning cuando `llm_provider != "ollama"`;
-    - actualizar `doctor` para distinguir provider local disponible, remoto incompleto y config válida.
-  - No funcional:
-    - definir timeout razonable y configurable o constante explícita;
-    - no implementar streaming ni retries sofisticados en este sprint;
-    - registrar provider, modelo, latencia y estado HTTP resumido;
-    - redactar API keys, bearer tokens, headers sensibles y URLs con credenciales;
-    - mantener tests sin red real.
-  - Pruebas:
-    - añadir unit tests de Ollama con transporte HTTP mockeado;
-    - añadir unit tests de OpenAI-compatible con transporte HTTP mockeado;
-    - añadir tests de timeout, HTTP 4xx/5xx y payload inesperado;
-    - añadir tests de redacción de `MEDIA_REPORT_OPENAI_API_KEY` en excepciones y logs;
-    - añadir tests de `doctor` para provider remoto sin API key;
-    - añadir integración CLI con provider fake local y provider fake remoto.
-  - Documentación/aceptación:
-    - documentar variables `MEDIA_REPORT_OPENAI_API_KEY`, `MEDIA_REPORT_OPENAI_BASE_URL` y `MEDIA_REPORT_OLLAMA_BASE_URL`;
-    - documentar warning de procesamiento remoto;
-    - dejar claro que Ollama es el default local y que APIs remotas son opt-in.
-- Checklist de implementación:
+  - errores 4xx/5xx, timeout, payload vacío o inválido;
+  - tests de redacción de secretos;
+  - integración CLI con providers fake local y remoto.
+- Checklist:
   - [ ] `OllamaProvider` deja de lanzar `NotImplementedError`.
   - [ ] `OpenAICompatibleProvider` deja de lanzar `NotImplementedError`.
-  - [ ] Las llamadas HTTP quedan encapsuladas en infraestructura.
-  - [ ] La selección de provider se resuelve fuera de la CLI directa.
-  - [ ] `llm_response_raw.txt` se persiste para respuestas exitosas.
-  - [ ] Respuesta vacía o no utilizable no genera `report.md` válido.
-  - [ ] Provider remoto sin API key falla con mensaje accionable.
-  - [ ] Los errores HTTP no imprimen tokens ni headers sensibles.
+  - [ ] `llm_response_raw.txt` se persiste en respuestas exitosas o parcialmente útiles.
+  - [ ] El provider remoto muestra warning y nunca filtra secretos.
   - [ ] `doctor` refleja configuración LLM incompleta o disponible.
-  - [ ] La suite usa mocks/fakes y no llama servicios externos.
-  - [ ] Si el provider funciona pero no hay redacción de secretos, el WI queda incompleto.
-- Preguntas de definición y cierre:
-  - Arquitectura:
-    - [ ] ¿Los adaptadores HTTP no filtran tipos del SDK o cliente hacia dominio?
-    - [ ] ¿La factory de provider evita condicionales duplicados en comandos?
-    - [ ] ¿El contrato del port permite registrar latencia y modelo efectivo sin acoplarse a HTTP?
-  - Negocio:
-    - [ ] ¿El default local satisface la política de privacidad del producto?
-    - [ ] ¿El usuario recibe aviso inequívoco antes de usar un proveedor remoto?
-  - Funcional:
-    - [ ] ¿Qué payload exacto se acepta de Ollama?
-    - [ ] ¿Qué endpoint OpenAI-compatible se usa y cómo se extrae el contenido Markdown?
-    - [ ] ¿Qué ocurre si el modelo no existe o el endpoint está caído?
-  - No funcional:
-    - [ ] ¿El timeout evita comandos colgados indefinidamente?
-    - [ ] ¿Los logs son útiles sin contener prompt completo, transcriptos completos o secretos?
-    - [ ] ¿La redacción cubre config, errores, metadata y consola?
-  - Pruebas:
-    - [ ] ¿Hay tests de proveedor local, remoto, timeout y HTTP error?
-    - [ ] ¿Hay tests explícitos de no filtrado de API key?
-    - [ ] ¿Hay integración con provider fake para la CLI?
-  - Documentación:
-    - [ ] ¿Las variables de entorno están documentadas con precedencia frente al TOML?
-    - [ ] ¿La documentación explica el warning remoto?
-  - Aceptación/cerrado:
-    - [ ] ¿Puede generarse `llm_response_raw.txt` con ambos providers?
-    - [ ] ¿Ningún path de error imprime secretos?
+- Preguntas de cierre:
+  - [ ] ¿El contracto del port sigue libre de detalles HTTP?
+  - [ ] ¿La redacción cubre config, consola, logs y errores?
+  - [ ] ¿La suite evita red real?
 
 #### WI-05-03 - Exponer `media-report report`
 
-- Objetivo: dar una entrada pública para generar o regenerar reportes desde un artifact directory.
-- Contexto técnico: el reporte depende de transcriptos, template y provider, y no debe forzar rehacer etapas previas.
-- Alcance funcional:
+- Estado: planificado
+- Objetivo: dar una entrada pública para generar o regenerar reportes desde un artifact directory sin rehacer transcripción.
+- Contexto técnico: `process --only-report` ya existe como selector de planning, pero aún no comparte un caso de uso real con una CLI dedicada.
+- Alcance:
   - aceptar artifact directory como input principal;
-  - permitir override de provider, model, template y output format;
-  - reutilizar desde `process --only-report`.
-  - preferir GPU en providers locales compatibles sin cambiar el contrato del comando.
+  - soportar `--template`, `--provider`, `--model`, `--overwrite`;
+  - reutilizar el mismo caso de uso desde `process --only-report`.
 - No se tocará:
   - render PDF;
-  - limpieza avanzada del transcripto;
-  - almacenamiento remoto de resultados.
-- Cambios esperados de CLI/API/artefactos/config:
-  - nuevo comando `report`;
-  - `process --only-report` pasa a ser compatibilidad sobre el mismo caso de uso;
-  - README actualizado.
-- Gherkin ampliado:
+  - limpieza semántica;
+  - batch reporting.
+- Cambios esperados:
+  - nuevo comando público `report`;
+  - `process --only-report --resume` usa la misma lógica;
+  - metadata y `pipeline.log` reflejan el ciclo real de `report`.
+- Gherkin:
 
 ```gherkin
-Scenario: Regenerar reporte desde artefactos existentes
+Scenario: Regenerar reporte desde artifact root existente
   Given un artifact directory con transcripción completada
-  When ejecuto "media-report report ruta_al_artifact_dir --template technical_report"
-  Then se genera o actualiza "report.md"
+  When ejecuto "media-report report artefactos --template technical_report"
+  Then se genera "report.md"
   And no se reejecuta transcripción
 
-Scenario: Ejecutar report desde process only-report
-  Given un artifact directory reusable con transcripción completada
-  When ejecuto "media-report process archivo.mp4 --resume --only-report"
-  Then se usa el mismo caso de uso que "media-report report"
-  And se generan "prompt_used.md", "llm_response_raw.txt" y "report.md"
-  And no se reejecutan extracción, normalización ni transcripción
-
-Scenario: Rechazar artifact directory sin transcripción válida
+Scenario: Rechazar artifact root sin prerequisitos
   Given un artifact directory sin "transcript_segments.json"
-  When ejecuto "media-report report ruta_al_artifact_dir"
-  Then el comando falla con mensaje accionable
-  And la etapa "report" no queda marcada como completada
-  And no se llama al proveedor LLM
-
-Scenario: Sobrescribir solo la etapa report
-  Given un artifact directory con "report.md" existente y transcripción válida
-  When ejecuto "media-report report ruta_al_artifact_dir --overwrite"
-  Then se regeneran "prompt_used.md", "llm_response_raw.txt" y "report.md"
-  And se preservan "transcript_raw.txt" y "transcript_segments.json"
-  And no se ejecutan etapas upstream
+  When ejecuto "media-report report artefactos"
+  Then el comando falla antes de llamar al LLM
 ```
 
-- Happy path:
-  - permite iterar templates y modelos;
-  - no rehace etapas upstream.
-- Bad paths:
-  - artifact dir sin transcripto;
-  - provider no configurado;
-  - conflicto de overwrite sobre `report.md`.
-- Observabilidad/logging:
-  - registrar inputs del reporte y etapas omitidas;
-  - log separado de prompt y respuesta cruda.
-  - registrar provider, modelo y dispositivo efectivo cuando el runtime lo exponga.
-- Pruebas unitarias/integración:
-  - integración CLI sobre artifact directory válido e inválido;
-  - tests de compatibilidad con `process --only-report`.
-- Criterio de aceptación:
-  - el usuario puede regenerar reportes de forma aislada y trazable.
-  - si existe aceleración por GPU disponible en el runtime local, el flujo la prefiere sin romper el fallback a CPU.
-- Desglose de tareas:
-  - Arquitectura:
-    - crear `ReportService` o caso de uso equivalente en `media_report.application`;
-    - reutilizar ese caso de uso desde `media-report report` y desde `ProcessMediaService` cuando se seleccione `report`;
-    - mantener CLI como capa de parsing, warnings y presentación;
-    - validar artifact root mediante `ArtifactRootValidator` antes de ejecutar reporting;
-    - inyectar `PromptTemplateRepository`, `LLMProvider` y repositorios de metadata/artefactos.
-  - Negocio/valor:
-    - permitir regenerar reportes sin rehacer transcripción costosa;
-    - soportar iteración rápida sobre template, provider y modelo;
-    - mantener el artifact root como unidad auditable de trabajo.
-  - Funcional:
-    - aceptar un artifact directory como input principal;
-    - resolver source original desde `metadata.json`;
-    - validar prerequisitos `transcript_raw.txt` y `transcript_segments.json`;
-    - renderizar prompt, invocar provider, persistir respuesta cruda y escribir `report.md`;
-    - marcar `report` como `running`, `completed` o `failed` con timestamps;
-    - reutilizar reporte completado y válido cuando no se solicita `--overwrite`;
-    - hacer que `--overwrite` fuerce solo la etapa `report`;
-    - mantener `pdf` como `planned` o `skipped` según selección, sin ejecutar Pandoc.
-  - No funcional:
-    - no reejecutar extracción, normalización ni transcripción desde `report`;
-    - emitir warning remoto antes o durante la ejecución cuando aplique;
-    - registrar provider, modelo, template, tamaño de prompt, tamaño de respuesta y duración;
-    - evitar stack traces para prerequisitos ausentes o provider mal configurado;
-    - preservar artefactos upstream ante cualquier fallo de reporting.
-  - Pruebas:
-    - añadir unit tests del caso de uso de reporting con providers fake;
-    - añadir tests de transición de metadata `planned -> running -> completed` y `planned -> running -> failed`;
-    - añadir integración CLI de `media-report report` con artifact directory válido;
-    - añadir integración CLI de artifact directory inválido o sin transcriptos;
-    - añadir tests de compatibilidad con `process --only-report --resume`;
-    - añadir tests de `--overwrite` limitado a artefactos de report.
-  - Documentación/aceptación:
-    - actualizar help text de `report` con `--template`, `--provider`, `--model` y `--overwrite`;
-    - documentar que `report` no procesa media files nuevos;
-    - documentar que `process --only-report` es compatibilidad sobre el mismo caso de uso.
-- Checklist de implementación:
+- Pruebas:
+  - integración CLI nominal e inválida;
+  - compatibilidad con `process --only-report --resume`;
+  - `--overwrite` limitado a artifacts de report.
+- Checklist:
   - [ ] Existe un comando público `media-report report`.
-  - [ ] El comando acepta artifact directory, no archivo fuente como entrada principal.
-  - [ ] Existe un caso de uso compartido para reporting.
-  - [ ] `process --only-report --resume` reutiliza ese mismo caso de uso.
-  - [ ] Se validan transcriptos antes de renderizar prompt.
-  - [ ] Se escriben `prompt_used.md`, `llm_response_raw.txt` y `report.md`.
-  - [ ] La metadata de `report` se actualiza en `running`, `completed` y `failed`.
-  - [ ] `--overwrite` reejecuta solo reporting.
-  - [ ] Fallos de reporting preservan transcriptos y metadata previa útil.
-  - [ ] `pdf` no se ejecuta en Sprint 05.
-  - [ ] Si `report` existe pero `process --only-report` no comparte lógica, el WI queda parcialmente implementado.
-- Preguntas de definición y cierre:
-  - Arquitectura:
-    - [ ] ¿El caso de uso compartido evita divergencia entre CLI dedicada y `process`?
-    - [ ] ¿La validación del artifact root se hace antes de tocar providers?
-    - [ ] ¿La CLI no contiene reglas de negocio de reporting?
-  - Negocio:
-    - [ ] ¿El comando permite iterar reportes con bajo coste operativo?
-    - [ ] ¿El usuario entiende que se reutiliza transcripción existente?
-  - Funcional:
-    - [ ] ¿Qué ocurre si `report.md` ya existe y no se pasa `--overwrite`?
-    - [ ] ¿Qué provider/model/template quedan registrados como efectivos?
-    - [ ] ¿Cómo se comporta `process --only-report` si falta `--resume` en una corrida fresca?
-  - No funcional:
-    - [ ] ¿Un fallo remoto no destruye `prompt_used.md` previo salvo que la nueva corrida lo reemplace de forma controlada?
-    - [ ] ¿Los mensajes de error son accionables para prerequisitos ausentes?
-    - [ ] ¿El warning remoto es visible también desde `process --only-report`?
-  - Pruebas:
-    - [ ] ¿Hay integración CLI para `report` nominal e inválido?
-    - [ ] ¿Hay cobertura de compatibilidad con `process --only-report`?
-    - [ ] ¿Hay tests de overwrite limitado?
-  - Documentación:
-    - [ ] ¿El help text conserva coherencia con comandos bootstrap?
-    - [ ] ¿La documentación deja PDF para Sprint 06?
-  - Aceptación/cerrado:
-    - [ ] ¿Se puede regenerar `report.md` sin reejecutar transcripción?
-    - [ ] ¿Un artifact root inválido falla antes de llamar al LLM?
+  - [ ] El input principal es artifact directory válido.
+  - [ ] `process --only-report` reutiliza el mismo caso de uso.
+  - [ ] `report.md` se persiste y la etapa se actualiza en metadata.
+- Preguntas de cierre:
+  - [ ] ¿`report` puede reutilizar artifacts previos de forma segura?
+  - [ ] ¿Los prerequisitos fallan antes de tocar el provider?
+  - [ ] ¿El warning remoto también aparece desde `process --only-report`?
+
+#### WI-05-04 - Cerrar semántica de completion de `report`
+
+- Estado: nuevo
+- Objetivo: fijar cuándo la etapa `report` puede considerarse `completed` y qué artifacts son obligatorios para reuso seguro.
+- Contexto técnico: hoy ya existe render de prompt, pero falta cerrar la semántica final de completion y reutilización de reporting.
+- Alcance:
+  - definir que `report` solo queda `completed` si existen `prompt_used.md`, `llm_response_raw.txt` y `report.md` coherentes;
+  - endurecer `ArtifactRootValidator` para la etapa `report`;
+  - fijar semántica de reuse y `--overwrite` limitada a reporting;
+  - alinear `process --only-report` con esa semántica.
+- No se tocará:
+  - PDF;
+  - `clean`;
+  - cambios de versión de metadata.
+- Cambios esperados:
+  - contrato explícito de artifacts obligatorios de `report`;
+  - mejor validación de reuso;
+  - mensajes de error más accionables ante reporting incompleto.
+- Gherkin:
+
+```gherkin
+Scenario: Reusar report completado y válido
+  Given un artifact root con artifacts completos de reporting
+  When ejecuto reporting sin "--overwrite"
+  Then la etapa "report" se reutiliza
+  And no se llama al provider LLM
+
+Scenario: Invalidar reporting incompleto
+  Given un artifact root con "report.md" pero sin "llm_response_raw.txt"
+  When intento reutilizar reporting
+  Then la etapa no se considera completada
+  And el comando propone reejecutar reporting
+```
+
+- Pruebas:
+  - unitarias del validador;
+  - integración de reuse completo e incompleto;
+  - casos de `--overwrite` sobre artifacts parciales.
+- Checklist:
+  - [ ] Los tres artifacts obligatorios quedan definidos.
+  - [ ] La etapa `report` no se reutiliza si falta alguno.
+  - [ ] `process --only-report` y `report` comparten la misma semántica.
+- Preguntas de cierre:
+  - [ ] ¿La metadata no marca falsos `completed`?
+  - [ ] ¿El usuario entiende cuándo reusa y cuándo regenera?
 
 ## Epic 06: Fase 6
 
-### Sprint 06 - PDF y flujo end-to-end de `process`
+### Sprint 06 - PDF y `process` end-to-end
 
-- Objetivo del sprint: completar el pipeline hasta `report.pdf` y consolidar `process` como comando extremo a extremo.
+- Estado: planificado
+- Objetivo del sprint: completar el pipeline hasta `report.pdf` y consolidar `process` como workflow principal extremo a extremo.
 - Alcance:
-  - `DocumentRenderer` real con Pandoc y plantilla TeX empaquetada;
+  - `DocumentRenderer` real con Pandoc y template empaquetada;
+  - persistencia de `report.pdf`;
   - orquestación completa de `process`;
-  - manejo de fallos parciales preservando Markdown.
-  - mantener trazabilidad del dispositivo efectivo en etapas de inferencia reutilizadas por `process`.
+  - preservación de `report.md` y metadata coherente ante fallos parciales de PDF.
 - Fuera de alcance:
   - QA visual profunda de PDF;
-  - múltiples engines PDF configurables más allá del mínimo razonable;
+  - múltiples themes o engines configurables;
   - optimizaciones de rendimiento.
 - Entregables:
-  - `report.pdf`;
-  - metadata con estados finales completos;
-  - smoke tests end-to-end con doubles de infraestructura y un camino de integración controlado.
+  - etapa `pdf` operativa;
+  - `process` produce `report.md` y `report.pdf` cuando el entorno lo permite;
+  - manejo claro de fallo parcial conservando Markdown.
 - Dependencias: Sprint 05.
 - Riesgos:
-  - presencia de `pandoc` y `xelatex/lualatex`;
-  - diferencias tipográficas por plataforma;
-  - pipeline largo y frágil si la orquestación no queda limpia.
-  - inconsistencias de observabilidad si `process` resume etapas hechas con distinto dispositivo sin dejar rastro.
+  - `pandoc` o engine TeX ausentes;
+  - diferencias tipográficas entre plataformas;
+  - pipeline más largo y frágil si la orquestación no queda limpia.
 - Criterio de salida:
-  - `process` produce `report.md` y `report.pdf`, o deja trazabilidad clara si PDF falla.
+  - `process` produce `report.pdf` o deja trazabilidad clara de por qué falló sin destruir `report.md`.
 
-#### WI-06-01 - Implementar `DocumentRenderer` y Pandoc adapter
+#### WI-06-01 - Implementar `DocumentRenderer` y adapter de Pandoc
 
-- Objetivo: renderizar PDF desde Markdown usando recursos empaquetados.
-- Contexto técnico: `PandocService.build_command()` ya existe, pero no ejecuta ni resuelve template desde recurso instalado.
-- Alcance funcional:
+- Estado: planificado
+- Objetivo: renderizar PDF desde Markdown usando resources empaquetados.
+- Contexto técnico: `PandocService.build_command()` ya existe, pero aún no ejecuta ni resuelve template desde package resources.
+- Alcance:
   - cargar `default.tex` con `importlib.resources`;
-  - ejecutar Pandoc con engine soportado;
+  - ejecutar `pandoc` con engine soportado;
   - persistir `report.pdf`.
 - No se tocará:
-  - edición avanzada de plantilla TeX;
-  - múltiples themes PDF en este sprint;
+  - themes múltiples;
+  - edición avanzada de LaTeX;
   - importación PDF como input.
-- Cambios esperados de CLI/API/artefactos/config:
-  - uso real de `report.pdf`;
-  - `doctor` potencialmente valida `pandoc` y motor TeX con mayor precisión.
-- Gherkin mínimo:
+- Cambios esperados:
+  - `DocumentRenderer` operativo;
+  - `doctor` puede endurecer validación de `pandoc` y engines TeX.
+- Gherkin:
 
 ```gherkin
-Scenario: Renderizar PDF desde Markdown existente
+Scenario: Renderizar PDF desde report.md
   Given un "report.md" válido
   When ejecuto la etapa PDF
   Then se genera "report.pdf"
   And la metadata marca "pdf" como completada
 ```
 
-- Happy path:
-  - template empaquetada funciona desde instalación;
-  - PDF generado en artifact dir.
-- Bad paths:
-  - `pandoc` ausente;
-  - engine TeX ausente;
-  - `report.md` inválido o vacío.
-- Observabilidad/logging:
-  - registrar comando, engine usado y tamaño del output;
-  - stderr resumido en fallo.
-- Pruebas unitarias/integración:
-  - unitarias del adapter y resolución de recursos;
+- Pruebas:
+  - unitarias del adapter y resolución de resources;
   - integración con subprocess fake;
   - smoke test instalado cuando el entorno tenga dependencias.
-- Criterio de aceptación:
-  - el render PDF funciona desde wheel instalada sin paths relativos al repo.
+- Checklist:
+  - [ ] La template se resuelve desde package resources.
+  - [ ] `report.pdf` se persiste.
+  - [ ] Los errores de `pandoc` o TeX se mapean a errores tipados.
+- Preguntas de cierre:
+  - [ ] ¿El render funciona igual desde wheel instalada?
+  - [ ] ¿Los fallos incluyen stderr resumido útil?
 
 #### WI-06-02 - Cerrar la orquestación completa de `process`
 
-- Objetivo: convertir `process` en la ruta principal end-to-end.
-- Contexto técnico: `process` empezó como bootstrap planner y debe terminar siendo un comando de pipeline completo.
-- Alcance funcional:
-  - ejecutar descubrimiento, audio, transcripción, reporting y PDF;
-  - reutilizar los mismos casos de uso de `transcribe` y `report`;
-  - respetar `--only-transcribe` y `--only-report` como compatibilidad aditiva.
-  - mantener preferencia por GPU en transcripción y providers locales de reporte cuando aplique.
+- Estado: planificado
+- Objetivo: convertir `process` en la ruta principal end-to-end reutilizando los mismos casos de uso de `transcribe`, `report` y `pdf`.
+- Contexto técnico: `process` hoy llega hasta transcripción y deja `report`/`pdf` solo planificados.
+- Alcance:
+  - ejecutar audio, transcripción, reporting y PDF según decisions;
+  - respetar `--only-transcribe` y `--only-report`;
+  - mantener compatibilidad total del comando público.
 - No se tocará:
   - daemonización;
   - colas de trabajo;
   - TUI.
-- Cambios esperados de CLI/API/artefactos/config:
-  - output de consola más orientado a resumen de pipeline;
-  - compatibilidad preservada con banderas existentes;
-  - sin renombrar `process`.
-- Gherkin mínimo:
+- Cambios esperados:
+  - `process` deja de ser “transcription-ready” y pasa a ser pipeline principal completo;
+  - resumen de consola más orientado a estado por etapa.
+- Gherkin:
 
 ```gherkin
-Scenario: Ejecutar pipeline completo para archivo único
+Scenario: Ejecutar pipeline completo
   Given un archivo de media válido y dependencias disponibles
   When ejecuto "media-report process archivo.mp4"
   Then se generan transcriptos, "report.md" y "report.pdf"
   And cada etapa queda trazada en metadata y pipeline.log
 ```
 
-- Happy path:
-  - `process` cubre el caso principal del producto;
-  - los comandos dedicados comparten la misma lógica de aplicación.
-- Bad paths:
-  - falla PDF pero se conserva `report.md`;
-  - falla LLM pero se conserva transcripción;
-  - error en un archivo no corrompe artefactos de otro.
-- Observabilidad/logging:
-  - resumen por etapa y por archivo;
-  - señal clara de fallo parcial versus total.
-  - visibilidad del dispositivo efectivo por etapa cuando la información esté disponible.
-- Pruebas unitarias/integración:
+- Pruebas:
   - integración CLI con doubles de todas las etapas;
-  - casos de fallo parcial preservando artefactos previos.
-- Criterio de aceptación:
-  - `process` ya representa el workflow del producto y no solo un bootstrap.
+  - casos de fallo parcial en reporting y PDF;
+  - compatibilidad con resume por etapa.
+- Checklist:
+  - [ ] `process` reutiliza los casos de uso de `transcribe`, `report` y `pdf`.
+  - [ ] El resumen por etapa distingue `planned`, `reused`, `completed` y `failed`.
+  - [ ] La compatibilidad de flags existentes se preserva.
+- Preguntas de cierre:
+  - [ ] ¿`process` sigue siendo el contrato principal sin duplicar lógica?
+  - [ ] ¿La reanudación conserva consistencia entre metadata y filesystem?
+
+#### WI-06-03 - Preservar `report.md` y metadata coherente ante fallos parciales de PDF
+
+- Estado: nuevo
+- Objetivo: asegurar que un fallo de PDF nunca degrade la etapa de reporting ni destruya el artifact Markdown.
+- Contexto técnico: el roadmap actualizado exige que la trazabilidad se preserve incluso cuando la etapa final falle.
+- Alcance:
+  - marcar `pdf` como `failed` sin alterar `report` completado;
+  - preservar `report.md`, `prompt_used.md` y `llm_response_raw.txt`;
+  - registrar error resumido y prerequisitos satisfechos.
+- No se tocará:
+  - retries automáticos de PDF;
+  - recuperación automática del entorno TeX.
+- Cambios esperados:
+  - semántica clara de fallo parcial;
+  - mejor observabilidad de `pdf`.
+- Gherkin:
+
+```gherkin
+Scenario: Fallar PDF preservando Markdown
+  Given un artifact root con "report.md" válido
+  And "pandoc" o el engine TeX fallan
+  When ejecuto la etapa PDF
+  Then "report.md" permanece intacto
+  And la etapa "report" sigue completada
+  And la etapa "pdf" queda en estado "failed"
+```
+
+- Pruebas:
+  - integración de fallo parcial preservando artifacts;
+  - validación de metadata y `pipeline.log`.
+- Checklist:
+  - [ ] El fallo de `pdf` no degrada `report`.
+  - [ ] `report.md` permanece reutilizable.
+  - [ ] El error resumido queda persistido.
+- Preguntas de cierre:
+  - [ ] ¿La reanudación desde `pdf` fallido es clara y segura?
 
 ## Epic 07: Fase 7
 
-### Sprint 07 - Packaging hardening, CI/CD y publicación
+### Sprint 07 - Packaging hardening, CI/CD y release candidate
 
-- Objetivo del sprint: tratar distribución e instalación como artefactos de primera clase.
+- Estado: planificado
+- Objetivo del sprint: tratar distribución e instalación como artifacts de primera clase y cerrar un criterio técnico de salida para `v0.1.0`.
 - Alcance:
-  - build y validación automatizados;
+  - CI de calidad y packaging;
   - smoke tests de instalación;
-  - pipeline de release a TestPyPI/PyPI con trusted publishing.
+  - pipeline de publicación a TestPyPI/PyPI;
+  - criterio de go/no-go para release candidate.
 - Fuera de alcance:
-  - nuevos features de pipeline de media;
+  - nuevos features del pipeline de media;
   - soporte oficial de Windows;
-  - marketplace de plugins o extensiones.
+  - marketplace de plugins.
 - Entregables:
   - workflow CI con `pytest`, `ruff`, `build`, `twine check`;
-  - smoke tests `uv tool install .` y `pipx install .`;
-  - guía de release cerrada para TestPyPI/PyPI.
+  - smoke install con `uv tool install .` y `pipx install .`;
+  - guía de release y criterio formal de RC.
 - Dependencias: Sprint 06.
 - Riesgos:
-  - diferencias entre entorno dev y entorno instalado;
-  - fallos de empaquetado de recursos;
-  - credenciales mal configuradas para publicación.
+  - diferencia entre checkout e instalación;
+  - resources empaquetados faltantes;
+  - credenciales o trusted publishing mal configurados.
 - Criterio de salida:
-  - cualquier release candidate puede instalarse y ejecutar `doctor`, `templates list` y un smoke test de `process`.
+  - cualquier RC puede instalarse, correr `doctor`, `templates list` y un smoke test del flujo principal soportado.
 
 #### WI-07-01 - Automatizar CI de calidad y packaging
 
+- Estado: planificado
 - Objetivo: ejecutar en cada cambio el mínimo de calidad requerido por distribución.
-- Contexto técnico: hoy existen comandos documentados, pero no hay evidencia de automatización de CI/CD en el repo inspeccionado.
-- Alcance funcional:
+- Contexto técnico: existen comandos documentados, pero no hay evidencia de CI automatizado en el repo.
+- Alcance:
   - `uv sync --extra dev`;
   - `uv run pytest`;
   - `uv run ruff check .`;
@@ -1561,10 +1369,10 @@ Scenario: Ejecutar pipeline completo para archivo único
 - No se tocará:
   - benchmarks;
   - tests contra servicios remotos reales.
-- Cambios esperados de CLI/API/artefactos/config:
+- Cambios esperados:
   - workflows CI;
   - documentación de gates obligatorios.
-- Gherkin mínimo:
+- Gherkin:
 
 ```gherkin
 Scenario: Validar paquete en CI
@@ -1574,141 +1382,164 @@ Scenario: Validar paquete en CI
   And "twine check" valida metadatos y artefactos
 ```
 
-- Happy path:
-  - CI falla temprano;
-  - packaging se valida en cada PR.
-- Bad paths:
-  - recurso empaquetado faltante;
-  - tests verdes en source checkout pero rojos al construir wheel.
-- Observabilidad/logging:
-  - publicar artefactos de build y logs de smoke tests.
-- Pruebas unitarias/integración:
+- Pruebas:
   - smoke de instalación como parte de CI;
-  - prueba explícita de carga de templates desde wheel.
-- Criterio de aceptación:
-  - ningún release candidate avanza sin build y verificación de paquete.
+  - validación de templates empaquetadas desde build artifact.
+- Checklist:
+  - [ ] El build se ejecuta en CI.
+  - [ ] `twine check` es gate obligatorio.
+  - [ ] Los logs de smoke y build se preservan.
+- Preguntas de cierre:
+  - [ ] ¿La pipeline falla temprano ante regressions de packaging?
 
 #### WI-07-02 - Smoke tests de instalación real
 
+- Estado: planificado
 - Objetivo: validar comportamiento desde entorno instalado, no solo desde checkout.
 - Contexto técnico: `docs/release.md` ya exige `uv tool install .` y `pipx install .`.
-- Alcance funcional:
+- Alcance:
   - instalar wheel localmente;
   - ejecutar `media-report doctor`;
   - ejecutar `media-report templates list`;
-  - ejecutar `media-report process` sobre fixture realista.
+  - ejecutar un smoke de `process`.
 - No se tocará:
-  - publicación directa a producción desde ramas de feature;
-  - matrices extensas de sistemas operativos fuera del alcance oficial.
-- Cambios esperados de CLI/API/artefactos/config:
-  - posibles ajustes en empaquetado y entrypoint;
-  - fixtures compatibles con instalación.
-- Gherkin mínimo:
+  - matrices amplias de SO;
+  - publicación desde ramas de feature.
+- Cambios esperados:
+  - scripts o workflow de smoke reproducibles;
+  - validación explícita de resources y entrypoint.
+- Gherkin:
 
 ```gherkin
 Scenario: Smoke test desde herramienta instalada
   Given un wheel construido localmente
   When instalo el paquete con "uv tool install"
   Then "media-report doctor" y "media-report templates list" funcionan
-  And "media-report process" crea artefactos sobre una fixture soportada
+  And el flujo soportado del CLI corre sobre una fixture válida
 ```
 
-- Happy path:
-  - entrypoint disponible;
-  - recursos empaquetados resueltos;
-  - smoke reproducible.
-- Bad paths:
-  - scripts no expuestos;
-  - plantillas no incluidas en wheel;
-  - dependencia opcional faltante sin mensaje claro.
-- Observabilidad/logging:
-  - conservar logs de instalación y ejecución.
-- Pruebas unitarias/integración:
-  - smoke scripts invocados por CI/release;
+- Pruebas:
+  - smoke script invocable por CI/release;
   - documentación de prerequisitos de entorno.
-- Criterio de aceptación:
-  - el paquete se comporta igual instalado que desde el repo.
+- Checklist:
+  - [ ] `uv tool install .` validado.
+  - [ ] `pipx install .` validado.
+  - [ ] resources empaquetadas verificadas desde instalación.
+- Preguntas de cierre:
+  - [ ] ¿El paquete instalado se comporta igual que desde el repo?
 
 #### WI-07-03 - Preparar publicación TestPyPI/PyPI y changelog de release
 
-- Objetivo: cerrar el circuito de publicación repetible.
-- Contexto técnico: el proyecto declara PyPI como target principal, pero falta automatizar publicación y endurecer la disciplina de release.
-- Alcance funcional:
+- Estado: planificado
+- Objetivo: cerrar el circuito de publicación repetible y auditable.
+- Contexto técnico: el proyecto declara PyPI como target principal, pero falta automatizar publicación.
+- Alcance:
   - trusted publishing o credenciales seguras;
   - release checklist ejecutable;
   - proceso de versionado y changelog.
 - No se tocará:
   - auto-versionado opaco;
-  - generación de release notes desde IA sin revisión humana.
-- Cambios esperados de CLI/API/artefactos/config:
+  - release notes sin revisión humana.
+- Cambios esperados:
   - docs de release actualizadas;
-  - posible workflow manual de publish.
-- Gherkin mínimo:
+  - workflow manual o semiautomático de publish.
+- Gherkin:
 
 ```gherkin
 Scenario: Publicar un release candidate
-  Given un tag de versión aprobado
+  Given un tag aprobado
   When ejecuto el flujo de publicación
   Then el paquete se publica en TestPyPI o PyPI
-  And el changelog y la versión quedan consistentes
+  And changelog y versión quedan consistentes
 ```
 
-- Happy path:
-  - publicación repetible y auditable;
-  - reducción de pasos manuales frágiles.
-- Bad paths:
-  - versión de paquete y changelog desalineados;
-  - fallo de autenticación;
-  - release incompleto sin smoke tests.
-- Observabilidad/logging:
-  - evidencia de publicación y checks ejecutados.
-- Pruebas unitarias/integración:
-  - validación de metadatos de release;
-  - dry run documentado cuando no haya credenciales.
-- Criterio de aceptación:
-  - publicar deja de depender de conocimiento tácito del mantenedor.
+- Pruebas:
+  - dry run documentado si no hay credenciales;
+  - validación de metadata de release.
+- Checklist:
+  - [ ] Existe flujo de publish documentado.
+  - [ ] El changelog y la versión quedan alineados.
+  - [ ] Hay soporte para Trusted Publishing o equivalente seguro.
+- Preguntas de cierre:
+  - [ ] ¿Publicar deja de depender de conocimiento tácito?
+
+#### WI-07-04 - Validar alcance real de `v0.1.0` y criterio go/no-go
+
+- Estado: nuevo
+- Objetivo: decidir formalmente si `v0.1.0` sale como release de transcripción trazable o si se pospone hasta cerrar `report.md` y/o `report.pdf`.
+- Contexto técnico: el roadmap actualizado exige evitar promesas públicas que el producto todavía no ejecuta.
+- Alcance:
+  - matriz de capacidad real vs documentación pública;
+  - checklist de go/no-go;
+  - criterio de RC y release final.
+- No se tocará:
+  - features nuevas del pipeline;
+  - cambios de branding.
+- Cambios esperados:
+  - definición documental de alcance de `v0.1.0`;
+  - posible ajuste de README, changelog y release notes.
+- Gherkin:
+
+```gherkin
+Scenario: Evaluar release candidate
+  Given el estado real del repo y la checklist de release
+  When se revisa el criterio go/no-go
+  Then queda explícito si "v0.1.0" se publica o se pospone
+  And la documentación pública no promete capacidades ausentes
+```
+
+- Pruebas:
+  - revisión cruzada de README, changelog, release docs y smoke tests.
+- Checklist:
+  - [ ] El alcance real de `v0.1.0` queda documentado.
+  - [ ] Existe criterio de RC y release final.
+  - [ ] La documentación pública no contradice el producto.
+- Preguntas de cierre:
+  - [ ] ¿`v0.1.0` exige `report.md`?
+  - [ ] ¿`v0.1.0` exige `report.pdf`?
 
 ## Epic 08: Fase 8
 
-### Sprint 08 - `clean`, extensibilidad y activos de portfolio
+### Sprint 08 - `clean`, extensibilidad y demo técnica
 
+- Estado: planificado
 - Objetivo del sprint: completar la superficie pública planeada y convertir el proyecto en un artefacto demostrable y extensible.
 - Alcance:
-  - comando `clean` sobre transcriptos;
-  - documentación de extensión para nuevos providers y templates;
-  - README/demo/artículo/ficha de portfolio.
+  - comando `clean`;
+  - guía de extensibilidad para providers y templates;
+  - demo técnica reproducible.
 - Fuera de alcance:
   - diarización real;
   - WhisperX;
   - job queues, watchers o TUI.
 - Entregables:
   - `media-report clean`;
-  - guía para agregar `LLMProvider`, `TranscriptionProvider` y templates;
-  - assets de portfolio y demo reproducible.
-- Dependencias: Sprints 04-07. `clean` entra solo después de estabilizar el contrato de transcriptos.
+  - guía de extensión técnica;
+  - demo o script reproducible alineado con el comportamiento real.
+- Dependencias: Sprints 04-07.
 - Riesgos:
-  - derivar `clean` antes de tener claro el artefacto `transcript_clean.md`;
-  - mezclar trabajo técnico y marketing sin criterio de prioridad.
+  - introducir `clean` antes de fijar su contrato exacto;
+  - mezclar trabajo técnico y marketing sin criterio.
 - Criterio de salida:
-  - el proyecto queda demostrable de punta a punta y un tercero puede extenderlo sin leer todo el repo.
+  - el proyecto queda extendible por terceros y demostrable sin asistencia del autor.
 
 #### WI-08-01 - Exponer `media-report clean`
 
-- Objetivo: introducir una etapa pública para limpiar y segmentar transcriptos preservando raw data.
-- Contexto técnico: el workflow objetivo ya contempla `transcript_clean.md`, pero el baseline actual aún no define ni comando ni algoritmo.
-- Alcance funcional:
-  - aceptar artifact directory con `transcript_raw.txt` y opcionalmente `transcript_segments.json`;
+- Estado: planificado
+- Objetivo: introducir una etapa pública para limpiar transcriptos preservando raw data.
+- Contexto técnico: el workflow objetivo contempla `transcript_clean.md`, pero el baseline actual aún no define ni comando ni algoritmo.
+- Alcance:
+  - aceptar artifact directory con `transcript_raw.txt`;
   - producir `transcript_clean.md`;
-  - dejar `process` listo para insertar esta etapa entre `transcribe` y `report` cuando se active.
+  - preparar la futura inserción de `clean` entre `transcribe` y `report`.
 - No se tocará:
-  - reescritura creativa del contenido;
+  - reescritura creativa;
   - clasificación temática avanzada;
-  - dependencias de modelos LLM para limpiar texto.
-- Cambios esperados de CLI/API/artefactos/config:
+  - uso de LLM para limpieza.
+- Cambios esperados:
   - nuevo comando `clean`;
-  - etapa `clean` añadida al esquema de metadata si se adopta formalmente;
-  - posible flag `--max-line-length` o `--speaker-markers` solo si es imprescindible.
-- Gherkin mínimo:
+  - posible etapa `clean` en metadata si se adopta formalmente.
+- Gherkin:
 
 ```gherkin
 Scenario: Limpiar transcripto desde artifact directory
@@ -1718,37 +1549,32 @@ Scenario: Limpiar transcripto desde artifact directory
   And el transcripto crudo permanece intacto
 ```
 
-- Happy path:
-  - texto limpio y segmentado;
-  - contrato claro para `report`.
-- Bad paths:
-  - transcripto ausente;
-  - segmentos corruptos;
-  - limpieza destruye información estructural relevante.
-- Observabilidad/logging:
-  - registrar heurísticas aplicadas y tamaño de salida;
-  - no sobrescribir transcriptos crudos.
-- Pruebas unitarias/integración:
+- Pruebas:
   - unitarias de normalización de texto;
   - integración CLI sobre artifact directory.
-- Criterio de aceptación:
-  - `clean` queda como comando público útil y no bloquea la trazabilidad.
+- Checklist:
+  - [ ] Existe comando público `clean`.
+  - [ ] El raw transcript nunca se sobrescribe.
+  - [ ] El output limpio queda trazado.
+- Preguntas de cierre:
+  - [ ] ¿`clean` produce un contrato suficientemente estable para reporting?
 
 #### WI-08-02 - Documentar extensibilidad para providers y templates
 
+- Estado: planificado
 - Objetivo: reducir el costo de agregar nuevas integraciones.
-- Contexto técnico: AGENTS.md ya fija reglas para añadir providers y templates, pero falta documentación operativa para un colaborador externo.
-- Alcance funcional:
+- Contexto técnico: AGENTS.md ya fija reglas, pero falta documentación operativa para terceros.
+- Alcance:
   - guía de `LLMProvider`;
   - guía de `TranscriptionProvider`;
-  - guía para prompts y plantillas PDF.
+  - guía para prompts y templates PDF.
 - No se tocará:
-  - sistema de plugins dinámicos;
-  - compatibilidad ABI entre versiones.
-- Cambios esperados de CLI/API/artefactos/config:
+  - plugins dinámicos;
+  - compatibilidad ABI.
+- Cambios esperados:
   - docs nuevas o ampliadas bajo `docs/`;
-  - referencias desde README.
-- Gherkin mínimo:
+  - referencias desde README o docs públicas.
+- Gherkin:
 
 ```gherkin
 Scenario: Agregar un nuevo provider siguiendo la guía
@@ -1758,34 +1584,30 @@ Scenario: Agregar un nuevo provider siguiendo la guía
   And sabe qué artefactos y pruebas debe añadir
 ```
 
-- Happy path:
-  - extensión predecible;
-  - menos decisiones implícitas.
-- Bad paths:
-  - guía desalineada con la arquitectura real;
-  - olvidar reglas de secretos o empaquetado.
-- Observabilidad/logging:
-  - no aplica de forma directa.
-- Pruebas unitarias/integración:
-  - no requiere tests de runtime, pero sí revisión cruzada con ejemplos reales del repo.
-- Criterio de aceptación:
-  - la guía cubre puertos, capas, artefactos y pruebas obligatorias.
+- Pruebas:
+  - revisión cruzada con ejemplos reales del repo.
+- Checklist:
+  - [ ] La guía cubre puertos, artifacts y pruebas.
+  - [ ] La guía no contradice la arquitectura real.
+- Preguntas de cierre:
+  - [ ] ¿Un tercero puede extender el proyecto sin leer todo el repo?
 
-#### WI-08-03 - Demo, README final y assets de portfolio
+#### WI-08-03 - Demo técnica y README final de producto
 
+- Estado: planificado
 - Objetivo: convertir el proyecto en un entregable demostrable además de instalable.
-- Contexto técnico: el README actual describe `0.1.0` como bootstrap; una vez completado el pipeline, la documentación pública debe reflejar el flujo real.
-- Alcance funcional:
-  - README con flujo completo;
+- Contexto técnico: el README actual describe `0.1.0` como bootstrap; una vez cerrado el flujo principal, la documentación pública debe reflejar el comportamiento real.
+- Alcance:
+  - README final alineado con el flujo real;
   - demo grabable o script reproducible;
-  - artículo técnico corto y ficha de portfolio.
+  - ejemplos públicos del CLI.
 - No se tocará:
-  - sitio web completo del producto;
+  - sitio completo de documentación;
   - materiales comerciales extensos.
-- Cambios esperados de CLI/API/artefactos/config:
+- Cambios esperados:
   - documentación actualizada;
-  - ejemplos de comandos `process`, `transcribe`, `clean`, `report`.
-- Gherkin mínimo:
+  - script o walkthrough reproducible.
+- Gherkin:
 
 ```gherkin
 Scenario: Usuario nuevo evalúa el proyecto desde README
@@ -1794,19 +1616,475 @@ Scenario: Usuario nuevo evalúa el proyecto desde README
   Then puedo instalar el CLI y ejecutar un flujo representativo
 ```
 
-- Happy path:
-  - el valor del proyecto se entiende rápido;
-  - demo alineada con el comportamiento real.
-- Bad paths:
-  - documentación desactualizada respecto al CLI;
-  - demo depende de entorno no documentado.
-- Observabilidad/logging:
-  - no aplica más allá de scripts de demo.
-- Pruebas unitarias/integración:
-  - smoke script de demo, si se automatiza;
-  - revisión manual de ejemplos de README como parte de release.
-- Criterio de aceptación:
-  - un tercero puede instalar, ejecutar y entender el proyecto sin asistencia del autor.
+- Pruebas:
+  - smoke script de demo si se automatiza;
+  - revisión manual de ejemplos del README.
+- Checklist:
+  - [ ] README refleja el comportamiento real del producto.
+  - [ ] Existe demo reproducible o grabable.
+  - [ ] Los ejemplos del CLI son ejecutables.
+- Preguntas de cierre:
+  - [ ] ¿La demo depende de entorno no documentado?
+
+## Epic 09: Heavy tests y evidencia operativa
+
+### Sprint 09 - Heavy tests y evidencia operativa
+
+- Estado: nuevo
+- Objetivo del sprint: convertir las pruebas con media real en un artifact técnico verificable del proyecto, no solo en intención.
+- Alcance:
+  - protocolo de pruebas pesadas;
+  - dataset local curado;
+  - resultados trazables por corrida;
+  - criterios de aceptación operativa de 5+ corridas reales.
+- Fuera de alcance:
+  - benchmark científico;
+  - automatización CI con media pesada;
+  - publicar datasets pesados dentro del repo.
+- Entregables:
+  - informe reproducible de heavy tests;
+  - matriz de formatos, tiempos y fallos;
+  - criterio de aceptación operativa.
+- Dependencias: al menos Sprint 04; idealmente Sprint 05 si `report.md` entra en el alcance real de release.
+- Riesgos:
+  - media local no curada o no redistribuible;
+  - resultados anecdóticos y no comparables;
+  - regresiones no clasificadas.
+- Criterio de salida:
+  - el proyecto puede demostrar con evidencia operativa qué formatos y escenarios soporta de verdad.
+
+#### WI-09-01 - Protocolo de pruebas pesadas con media real
+
+- Estado: nuevo
+- Objetivo: formalizar cómo se ejecutan heavy tests y qué artifacts dejan.
+- Contexto técnico: ya existe convención de fixtures locales opcionales, pero no un protocolo cerrado de ejecución y registro.
+- Alcance:
+  - carpeta local de muestras;
+  - categorías mínimas de media;
+  - formato estándar de reporte de corrida.
+- No se tocará:
+  - versionado de media pesada en Git;
+  - automatización obligatoria en CI.
+- Cambios esperados:
+  - documento/protocolo de heavy tests;
+  - template para reportar resultados.
+- Gherkin:
+
+```gherkin
+Scenario: Ejecutar una corrida pesada documentada
+  Given una muestra local permitida
+  When ejecuto el protocolo de heavy tests
+  Then obtengo tiempos, outputs, fallos y observaciones registradas
+```
+
+- Pruebas:
+  - no aplica como suite automatizada pesada; sí como protocolo reproducible.
+- Checklist:
+  - [ ] Existen categorías mínimas de muestra.
+  - [ ] Existe formato estándar de reporte.
+  - [ ] El protocolo no depende de memoria tácita.
+- Preguntas de cierre:
+  - [ ] ¿Las licencias y procedencias de muestras están claras?
+
+#### WI-09-02 - Matriz de formatos, tiempos, fallos y calidad mínima
+
+- Estado: nuevo
+- Objetivo: consolidar una matriz técnica de comportamiento observable por tipo de archivo.
+- Contexto técnico: el roadmap actualizado exige evidencia, no solo intención, para “5 archivos reales de distinto tipo”.
+- Alcance:
+  - tabla por formato, duración, resultado, tiempo y fallos;
+  - clasificación de severidad de fallos;
+  - calidad mínima de salida aceptable.
+- No se tocará:
+  - evaluación lingüística profunda del contenido;
+  - métricas académicas de calidad.
+- Cambios esperados:
+  - matriz técnica de soporte real.
+- Gherkin:
+
+```gherkin
+Scenario: Consolidar soporte real por formato
+  Given varias corridas pesadas documentadas
+  When consolido la matriz de resultados
+  Then sé qué formatos y escenarios son soportados, lentos o inestables
+```
+
+- Pruebas:
+  - revisión técnica de la matriz y consistencia con artifacts reales.
+- Checklist:
+  - [ ] La matriz registra formato, duración, tiempo y resultado.
+  - [ ] Los fallos quedan clasificados por severidad.
+  - [ ] Existe umbral mínimo de salida aceptable.
+- Preguntas de cierre:
+  - [ ] ¿Qué se declara oficialmente soportado?
+
+#### WI-09-03 - Criterios de aceptación operativa y tratamiento de regresiones
+
+- Estado: nuevo
+- Objetivo: definir qué cuenta como “corridas reales satisfactorias” y cómo se tratan regresiones detectadas en heavy tests.
+- Contexto técnico: sin un criterio explícito, las pruebas pesadas pueden convertirse en observaciones dispersas.
+- Alcance:
+  - criterio de aceptación operativa para 5+ corridas;
+  - clasificación de regresiones;
+  - reglas de bloqueo o defer.
+- No se tocará:
+  - sistema de issue tracking externo;
+  - dashboards complejos.
+- Cambios esperados:
+  - reglas de cierre para evidence-based release readiness.
+- Gherkin:
+
+```gherkin
+Scenario: Detectar regresión bloqueante en heavy tests
+  Given una corrida pesada que antes pasaba
+  When reaparece con peor resultado o fallo nuevo
+  Then la regresión queda clasificada
+  And se decide si bloquea o no la release
+```
+
+- Pruebas:
+  - revisión cruzada con el protocolo y la matriz.
+- Checklist:
+  - [ ] Existe criterio de aceptación para 5+ corridas reales.
+  - [ ] Existe tratamiento explícito de regresiones.
+  - [ ] El criterio se conecta con el go/no-go de release.
+- Preguntas de cierre:
+  - [ ] ¿Qué tipo de regresión bloquea una RC?
+
+## Epic 10: Publicación técnica y activos públicos
+
+### Sprint 10 - Publicación técnica, docs site y portfolio
+
+- Estado: nuevo
+- Objetivo del sprint: convertir el producto técnico ya estabilizado en un activo público coherente, demostrable y extensible.
+- Alcance:
+  - docs site o publicación técnica equivalente;
+  - caso de estudio de portfolio;
+  - guía pública de extensibilidad.
+- Fuera de alcance:
+  - campaña comercial;
+  - website completa del producto;
+  - marketing de comunidad.
+- Entregables:
+  - documentación pública técnica;
+  - demo/caso de estudio;
+  - guía pública para contributors técnicos.
+- Dependencias: Sprint 08 y Sprint 09.
+- Riesgos:
+  - documentación que vuelva a prometer más que el producto;
+  - duplicación contradictoria entre README, roadmap, backlog y docs públicas.
+- Criterio de salida:
+  - un tercero puede entender qué hace el proyecto, instalarlo, ver una demo y entender cómo extenderlo.
+
+#### WI-10-01 - Docs site o publicación técnica equivalente
+
+- Estado: nuevo
+- Objetivo: exponer documentación técnica fuera del backlog y del repo interno largo.
+- Contexto técnico: hoy la documentación vive en Markdown del repositorio, pero el roadmap público exige una salida más presentable.
+- Alcance:
+  - docs site ligero o publicación técnica equivalente;
+  - secciones mínimas de instalación, arquitectura, comandos y límites.
+- No se tocará:
+  - portal complejo;
+  - search avanzada;
+  - localización multilenguaje.
+- Cambios esperados:
+  - estructura de docs públicas;
+  - enlaces desde README.
+- Gherkin:
+
+```gherkin
+Scenario: Usuario técnico consulta documentación pública
+  Given una publicación técnica del proyecto
+  When busco instalación, comandos y arquitectura
+  Then encuentro una guía clara y consistente con el repo
+```
+
+- Pruebas:
+  - revisión cruzada con README, roadmap y comportamiento real del CLI.
+- Checklist:
+  - [ ] La docs pública no contradice al producto.
+  - [ ] Cubre instalación, comandos, arquitectura y límites.
+  - [ ] Tiene enlaces desde README.
+- Preguntas de cierre:
+  - [ ] ¿La docs pública es suficiente sin obligar a leer el backlog?
+
+#### WI-10-02 - Demo reproducible y caso de estudio de portfolio
+
+- Estado: nuevo
+- Objetivo: preparar un asset público demostrable y técnicamente honesto.
+- Contexto técnico: el roadmap actualizado elevó demo y portfolio a brechas explícitas.
+- Alcance:
+  - script o walkthrough reproducible;
+  - caso de estudio técnico;
+  - narrativa de problema, solución, arquitectura y limitaciones.
+- No se tocará:
+  - branding complejo;
+  - materiales comerciales largos.
+- Cambios esperados:
+  - asset de demo;
+  - ficha de portfolio.
+- Gherkin:
+
+```gherkin
+Scenario: Mostrar el proyecto como caso de portfolio
+  Given una demo reproducible y un caso de estudio
+  When un tercero revisa el material
+  Then entiende el problema, la solución, el flujo real y las limitaciones
+```
+
+- Pruebas:
+  - smoke script de demo si existe;
+  - revisión manual de consistencia con el producto.
+- Checklist:
+  - [ ] Existe demo reproducible o grabable.
+  - [ ] Existe caso de estudio técnico.
+  - [ ] El material no promete features ausentes.
+- Preguntas de cierre:
+  - [ ] ¿La demo está alineada con el alcance real de la release?
+
+#### WI-10-03 - Guía pública de extensibilidad para providers y templates
+
+- Estado: nuevo
+- Objetivo: publicar una guía externa y amigable para extender el proyecto sin depender del backlog interno.
+- Contexto técnico: el backlog y AGENTS.md ya cubren mucho detalle, pero no como guía pública para terceros.
+- Alcance:
+  - agregar provider LLM;
+  - agregar provider de transcripción;
+  - agregar prompt template y PDF template;
+  - pruebas mínimas y reglas de seguridad.
+- No se tocará:
+  - sistema formal de plugins;
+  - compatibilidad binaria entre versiones.
+- Cambios esperados:
+  - guía pública de extensibilidad;
+  - referencias desde docs públicas y README.
+- Gherkin:
+
+```gherkin
+Scenario: Contribuidor externo extiende el proyecto
+  Given una guía pública de extensibilidad
+  When intento agregar un provider o template nuevo
+  Then sé qué port implementar, qué artifacts respetar y qué pruebas añadir
+```
+
+- Pruebas:
+  - revisión cruzada con la arquitectura real del repo.
+- Checklist:
+  - [ ] La guía cubre ports, artifacts, tests y secretos.
+  - [ ] La guía es consistente con el repo actual.
+  - [ ] Está enlazada desde docs públicas o README.
+- Preguntas de cierre:
+  - [ ] ¿Un tercero puede extender el proyecto sin leer AGENTS.md completo?
+
+## Flujo principal recomendado
+
+```mermaid
+flowchart TD
+  A[Detectar archivo] --> B[Validar formato]
+  B --> C{Es video}
+  C -- Si --> D[Extraer audio]
+  C -- No --> E[Usar audio de origen]
+  D --> F[Normalizar audio]
+  E --> F
+  F --> G[Transcribir]
+  G --> H[Persistir transcript_raw.txt y transcript_segments.json]
+  H --> I{Reporting habilitado}
+  I -- No --> J[Guardar metadata y pipeline.log]
+  I -- Si --> K[Renderizar prompt]
+  K --> L[Generar report.md]
+  L --> M{PDF habilitado}
+  M -- No --> J
+  M -- Si --> N[Renderizar report.pdf]
+  N --> J
+```
+
+Lectura operativa del flujo:
+
+- lo implementado hoy llega con solidez hasta `Transcribir`;
+- `Renderizar prompt` ya existe parcialmente;
+- `Generar report.md` y `Renderizar report.pdf` son las dos brechas centrales del backlog desde Sprint 05.
+
+## Comandos mínimos del MVP
+
+### Comandos públicos actuales
+
+#### `process`
+
+```bash
+media-report process PATH [OPTIONS]
+```
+
+- Estado: público y operativo.
+- Alcance real actual:
+  - descubre media válida;
+  - crea o reutiliza artifact roots;
+  - ejecuta `extract_audio`, `normalize_audio` y `transcribe`;
+  - deja `report` y `pdf` planificados.
+- Parámetros públicos actuales:
+  - `PATH`
+  - `--recursive`
+  - `--resume`
+  - `--overwrite` como alias deprecado de `--resume`
+  - `--provider`
+  - `--model`
+  - `--language`
+  - `--template`
+  - `--output-format`
+  - `--only-transcribe`
+  - `--only-report`
+
+#### `transcribe`
+
+```bash
+media-report transcribe PATH [OPTIONS]
+```
+
+- Estado: público y operativo.
+- Alcance real actual:
+  - acepta media file o artifact root;
+  - reutiliza o reejecuta la etapa `transcribe`;
+  - persiste transcriptos y metadata.
+- Parámetros públicos actuales:
+  - `PATH`
+  - `--language`
+  - `--model`
+  - `--overwrite`
+
+#### `config init`
+
+```bash
+media-report config init [OPTIONS]
+```
+
+- Estado: público y operativo.
+- Parámetros actuales:
+  - `--force`
+  - `--path`
+
+#### `config show`
+
+```bash
+media-report config show
+```
+
+- Estado: público y operativo.
+- Muestra configuración efectiva con secretos redactados.
+
+#### `doctor`
+
+```bash
+media-report doctor
+```
+
+- Estado: público y operativo.
+- Valida plataforma, binarios, templates, capability de transcripción y estado básico de configuración.
+
+#### `templates list`
+
+```bash
+media-report templates list
+```
+
+- Estado: público y operativo.
+- Lista prompt templates y PDF templates empaquetadas.
+
+### Comandos públicos planificados
+
+#### `report`
+
+```bash
+media-report report ARTIFACT_ROOT [OPTIONS]
+```
+
+- Estado: planificado.
+- Alcance objetivo:
+  - reutilizar transcripción válida;
+  - generar `prompt_used.md`, `llm_response_raw.txt` y `report.md`;
+  - no reejecutar etapas upstream.
+
+#### `clean`
+
+```bash
+media-report clean ARTIFACT_ROOT [OPTIONS]
+```
+
+- Estado: planificado.
+- Alcance objetivo:
+  - producir `transcript_clean.md`;
+  - preservar siempre el raw transcript.
+
+## Definition of Done por feature
+
+Una feature no se considera terminada hasta que cumpla:
+
+```txt
+- Tiene comando o función accesible.
+- Tiene prueba mínima.
+- Tiene manejo de error esperado.
+- Tiene documentación breve.
+- No rompe el flujo principal.
+- Funciona con al menos un archivo real o fixture equivalente válido.
+- Registra salida o log verificable.
+```
+
+Reglas adicionales para este proyecto:
+
+- si una capacidad existe solo como builder o scaffold, no cuenta como feature terminada;
+- si una etapa persiste artifacts pero no actualiza metadata de forma consistente, no cuenta como cerrada;
+- si un flag público solo afecta planning y no ejecución, debe documentarse exactamente así;
+- ningún secreto puede filtrarse en consola, metadata o logs.
+
+## Métricas de avance
+
+| Métrica | Estado actual | Meta backlog |
+| --- | ---: | ---: |
+| Archivos reales procesados con evidencia consolidada | Pendiente | 10 |
+| Formatos probados | Parcial | 4 |
+| Comandos públicos actuales | 6 | 8 |
+| Etapas productivas cerradas | 3 | 5 |
+| Tests del pipeline | Sí | Sí |
+| Release candidate | 0 | 1 |
+| Release pública validada | 0 | 1 |
+| Caso de estudio de portfolio | 0 | 1 |
+| Guía pública de extensibilidad | 0 | 1 |
+
+Las métricas prioritarias para desbloquear release real son:
+
+- evidencia de heavy tests;
+- cierre de `report.md`;
+- cierre de `report.pdf` o decisión explícita de postergarlo;
+- smoke install y CI;
+- alineación documental de `v0.1.0`.
+
+## Riesgos principales
+
+| Riesgo | Impacto | Mitigación |
+| --- | --- | --- |
+| Archivos largos rompen el flujo | Alto | Heavy tests desde Sprint 09 |
+| Dependencias multimedia difíciles | Alto | `doctor`, docs de instalación y smoke install |
+| Salidas desordenadas o reuse inseguro | Medio | Artifact root por archivo y validación estricta |
+| Costos LLM inesperados | Medio | Provider local por defecto y warning remoto |
+| Fuga de secretos | Alto | Redacción estricta y tests específicos |
+| Documentación prometiendo más que el producto | Alto | WI-07-04 y revisión cruzada de docs |
+| Publicar antes de estabilizar | Medio | RC y criterio go/no-go explícito |
+
+## Qué no hacer todavía
+
+No conviene hacer ahora:
+
+- GUI;
+- SaaS;
+- dashboard web;
+- integraciones externas masivas;
+- PDF avanzado antes de cerrar `report.md`;
+- diarización compleja;
+- plugin system formal;
+- paralelización avanzada;
+- watch folder;
+- sincronización cloud.
+
+Primero hay que cerrar un núcleo fuerte y confiable.
 
 ## Estrategia de Pruebas por Nivel
 
@@ -1871,7 +2149,9 @@ Scenario: Usuario nuevo evalúa el proyecto desde README
 5. Implementar reporting LLM y `report`.
 6. Completar PDF y end-to-end de `process`.
 7. Endurecer packaging, CI/CD y release.
-8. Añadir `clean` y documentación de extensibilidad/portfolio.
+8. Añadir `clean`, guía de extensibilidad y demo técnica.
+9. Ejecutar heavy tests con evidencia operativa y matriz de formatos.
+10. Publicar activos técnicos externos: docs site, caso de estudio y portfolio.
 
 ## Criterio Global de Done
 
@@ -1881,5 +2161,9 @@ Scenario: Usuario nuevo evalúa el proyecto desde README
 - `transcribe`, `report` y `clean` se añaden de forma aditiva.
 - Recursos empaquetados siguen funcionando desde instalación.
 - Hay tests unitarios e integración para cada cambio público.
+- Las etapas nuevas dejan artifacts y `metadata.json` coherentes incluso ante fallos parciales.
+- Existe evidencia operativa suficiente cuando una feature declara soporte real sobre media no trivial.
 - El paquete puede construirse, validarse e instalarse fuera del checkout.
+- El release candidate y la decisión go/no-go quedan documentados antes de publicación.
 - README y docs reflejan el estado real del flujo.
+- Los activos públicos externos no prometen capacidades que el repo todavía no ejecuta.
