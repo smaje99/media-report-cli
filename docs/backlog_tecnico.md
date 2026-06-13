@@ -1288,7 +1288,8 @@ Scenario: Invalidar reporting incompleto
 
 #### WI-06-01 - Implementar `DocumentRenderer` y adapter de Pandoc
 
-- Estado: planificado
+- Estado: hecho
+- Cerrado en: `2026-06-13T01:11:38-05:00`
 - Objetivo: renderizar PDF desde Markdown usando resources empaquetados.
 - Contexto técnico: `PandocService.build_command()` ya existe, pero aún no ejecuta ni resuelve template desde package resources, y el port `DocumentRenderer` sigue sin adapter real.
 - Alcance:
@@ -1361,20 +1362,28 @@ Scenario: Persistir error resumido cuando Pandoc devuelve fallo
   - Pruebas:
     - cubrir nominal, fallback, template ausente, `pandoc` ausente y error del engine;
     - validar que el adapter siga siendo fakeable desde tests.
-  - Documentación/aceptación:
-    - actualizar backlog con capability PDF en `doctor`;
-    - dejar explícito que no existe comando público `pdf`.
+- Documentación/aceptación:
+  - actualizar backlog con capability PDF en `doctor`;
+  - dejar explícito que no existe comando público `pdf`.
 - Checklist de implementación:
-  - [ ] El port `DocumentRenderer` está cableado a un adapter real, no solo definido.
-  - [ ] La template se resuelve desde package resources también desde wheel instalada.
-  - [ ] `report.pdf` se persiste y la metadata cambia a `completed`.
-  - [ ] El fallback `xelatex -> lualatex` existe y queda reflejado en `doctor` o en el log.
-  - [ ] Los errores de `pandoc` o TeX se mapean a errores tipados y resumidos.
-  - [ ] El adapter funciona sin introducir paths relativos al repo.
+  - [x] El port `DocumentRenderer` está cableado a un adapter real, no solo definido.
+  - [x] La template se resuelve desde package resources también desde wheel instalada.
+  - [x] `report.pdf` se persiste y la metadata cambia a `completed`.
+  - [x] El fallback `xelatex -> lualatex` existe y queda reflejado en `doctor` o en el log.
+  - [x] Los errores de `pandoc` o TeX se mapean a errores tipados y resumidos.
+  - [x] El adapter funciona sin introducir paths relativos al repo.
 - Preguntas de definición y cierre:
-  - [ ] ¿El render funciona igual desde wheel instalada?
-  - [ ] ¿Los fallos incluyen stderr resumido útil sin crear artifacts nuevos?
-  - [ ] ¿`doctor` puede distinguir entorno PDF incompleto de entorno listo?
+  - [x] ¿El render funciona igual desde wheel instalada?
+  - [x] ¿Los fallos incluyen stderr resumido útil sin crear artifacts nuevos?
+  - [x] ¿`doctor` puede distinguir entorno PDF incompleto de entorno listo?
+
+- Resultado implementado:
+  - `PandocDocumentRenderer` quedó operativo detrás del port `DocumentRenderer`, resolviendo `default.tex` desde package resources y ejecutando `pandoc` con `xelatex` como engine primario y `lualatex` como fallback acotado a problemas de selección o disponibilidad del engine;
+  - `ReportGenerationService` ahora cierra también la etapa `pdf` para los flujos compartidos de `report` y `process --resume --only-report`, persistiendo `report.pdf`, marcando transiciones `running/completed/failed` y preservando `report=completed` cuando el fallo ocurre solo downstream en PDF;
+  - la capa de errores incorpora `PDFRenderingConfigurationError`, `PDFRenderingExecutionError` y `PDFRenderingOutputError`, y la metadata junto con `pipeline.log` persisten resúmenes redactados con códigos específicos de fallo PDF;
+  - `PromptRunPreparer` recupera metadata inconsistente cuando `pdf` figuraba `completed` pero faltaba `report.pdf`, degradando solo esa etapa a `planned` para permitir rerender sin rerun LLM;
+  - `doctor` ahora expone una capability compuesta `pdf` además de los comandos individuales, distinguiendo entorno listo con `xelatex`, entorno usable con fallback a `lualatex` y toolchain o template incompletos;
+  - la cobertura se amplió con pruebas unitarias del builder de Pandoc, capability PDF, renderer real, semántica de reuse/fallo parcial en reporting, y pruebas de integración CLI y de aplicación para `report`, `process --only-report`, `doctor` y wheel build.
 
 #### WI-06-02 - Cerrar la orquestación completa de `process`
 
