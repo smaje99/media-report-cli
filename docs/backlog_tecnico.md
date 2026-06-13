@@ -1047,7 +1047,8 @@ Scenario: Generar prompt auditable desde artifact root
 
 #### WI-05-02 - Implementar providers LLM reales y redacción de secretos
 
-- Estado: planificado
+- Estado: hecho
+- Cerrado en: `2026-06-12T22:14:56-05:00`
 - Objetivo: soportar generación Markdown con un provider local y uno remoto compatible OpenAI sin violar la política de secretos.
 - Contexto técnico: `OllamaProvider` y `OpenAICompatibleProvider` existen, pero siguen scaffolded.
 - Alcance:
@@ -1080,20 +1081,29 @@ Scenario: Fallar con provider remoto sin API key
 ```
 
 - Pruebas:
-  - unitarias de adapters HTTP con `httpx` mockeado;
+  - unitarias de adapters LLM sobre `pydantic-ai` sin red real;
   - errores 4xx/5xx, timeout, payload vacío o inválido;
   - tests de redacción de secretos;
-  - integración CLI con providers fake local y remoto.
+  - integración de reporting con providers fake local y remoto, más `doctor` con capability LLM.
 - Checklist:
-  - [ ] `OllamaProvider` deja de lanzar `NotImplementedError`.
-  - [ ] `OpenAICompatibleProvider` deja de lanzar `NotImplementedError`.
-  - [ ] `llm_response_raw.txt` se persiste en respuestas exitosas o parcialmente útiles.
-  - [ ] El provider remoto muestra warning y nunca filtra secretos.
-  - [ ] `doctor` refleja configuración LLM incompleta o disponible.
+  - [x] `OllamaProvider` deja de lanzar `NotImplementedError`.
+  - [x] `OpenAICompatibleProvider` deja de lanzar `NotImplementedError`.
+  - [x] `llm_response_raw.txt` se persiste en respuestas exitosas o parcialmente útiles.
+  - [x] El provider remoto muestra warning y nunca filtra secretos.
+  - [x] `doctor` refleja configuración LLM incompleta o disponible.
 - Preguntas de cierre:
-  - [ ] ¿El contracto del port sigue libre de detalles HTTP?
-  - [ ] ¿La redacción cubre config, consola, logs y errores?
-  - [ ] ¿La suite evita red real?
+  - [x] ¿El contracto del port sigue libre de detalles HTTP?
+  - [x] ¿La redacción cubre config, consola, logs y errores?
+  - [x] ¿La suite evita red real?
+
+- Resultado implementado:
+  - `ReportGenerationService` quedó incorporado como caso de uso de aplicación para cerrar la etapa `report` sobre artifact roots ya transcritos, reutilizando `PromptRenderService` y persistiendo `llm_response_raw.txt` junto con `report.md`;
+  - `OllamaProvider` y `OpenAICompatibleProvider` dejaron de ser scaffolds y ahora ejecutan generación real detrás del port `LLMProvider`, manteniendo el dominio y la aplicación libres de detalles HTTP y de `pydantic-ai`;
+  - la resolución del provider efectivo quedó centralizada en infraestructura a partir de `AppSettings`, incluyendo normalización de `MEDIA_REPORT_OLLAMA_BASE_URL`, validación de `MEDIA_REPORT_OPENAI_API_KEY` y selección explícita de provider/modelo sin depender de variables implícitas del runtime;
+  - la redacción de secretos se consolidó en un helper reusable de core y ahora cubre `config show`, errores de providers, mensajes con bearer tokens, logs y URLs con credenciales embebidas;
+  - `doctor` ahora expone una capability LLM dedicada, diferenciando provider local listo, provider remoto configurado, configuración inválida y dependencia ausente sin realizar red real;
+  - la metadata de workflow y `pipeline.log` preservan trazabilidad de provider/modelo efectivos, éxito o fallo resumido y estado final de la etapa `report`, sin cambiar `schema_version`;
+  - la cobertura se amplió con pruebas unitarias de providers, capabilities, redacción y generación de reportes, además de integración de reporting y `doctor`, manteniendo toda la suite libre de red real.
 
 #### WI-05-03 - Exponer `media-report report`
 
