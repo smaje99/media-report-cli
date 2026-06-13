@@ -10,10 +10,12 @@ from media_report.core.errors import (
   StagePrerequisiteError,
 )
 from media_report.domain.artifacts.entities import (
+  ArtifactPlan,
   PipelineMetadata,
   PipelineStage,
-  PipelineStageMetadata,
+  PipelineStageDecision,
   PipelineStageStatus,
+  StageDecision,
 )
 from media_report.domain.artifacts.ports import PipelineMetadataRepository
 from media_report.domain.artifacts.service import (
@@ -75,7 +77,15 @@ class PromptRunPreparer:
         metadata=metadata,
       )
     except ArtifactMetadataError as exc:
-      raise PromptRenderPrerequisiteError(str(exc)) from exc
+      metadata, report_recovery_reason = self._recover_invalid_report_completion(
+        metadata=metadata,
+        artifacts=artifacts,
+        error=exc,
+      )
+      if report_recovery_reason is None:
+        raise PromptRenderPrerequisiteError(str(exc)) from exc
+    else:
+      report_recovery_reason = None
 
     effective_template = request.template_name or metadata.workflow.template_name
     metadata = self._artifact_planner.update_workflow(
@@ -88,6 +98,12 @@ class PromptRunPreparer:
       selected_stages=request.workflow_selected_stages,
     )
 
+    if request.overwrite:
+      metadata = self._artifact_planner.reset_stages_to_planned(
+        metadata,
+        stages=(PipelineStage.REPORT, PipelineStage.PDF),
+      )
+
     try:
       stage_decisions = self._state_planner.plan_resume(
         metadata=metadata,
@@ -97,11 +113,25 @@ class PromptRunPreparer:
     except StagePrerequisiteError as exc:
       raise PromptRenderPrerequisiteError(str(exc)) from exc
 
-    if request.overwrite:
-      metadata = _reset_report_stage_to_planned(metadata)
+    if report_recovery_reason is not None:
+      stage_decisions = _replace_stage_decision_reason(
+        stage_decisions=stage_decisions,
+        stage=PipelineStage.REPORT,
+        reason=report_recovery_reason,
+      )
 
     self._metadata_repository.write(metadata)
     self._artifact_planner.ensure_log(artifacts.root_dir)
+    if request.overwrite:
+      self._artifact_planner.append_log_event(
+        artifacts.root_dir,
+        "report artifacts reset for regeneration; pdf stage marked planned.",
+      )
+    elif report_recovery_reason is not None:
+      self._artifact_planner.append_log_event(
+        artifacts.root_dir,
+        report_recovery_reason,
+      )
     return PreparedPromptRun(
       source=source,
       artifacts=artifacts,
@@ -115,17 +145,40 @@ class PromptRunPreparer:
       return self._scanner.classify(source_path)
     return MediaSource(path=source_path, kind=MediaKind(metadata.source.kind))
 
+  def _recover_invalid_report_completion(
+    self,
+    *,
+    metadata: PipelineMetadata,
+    artifacts: ArtifactPlan,
+    error: ArtifactMetadataError,
+  ) -> tuple[PipelineMetadata, str | None]:
+    report_status = metadata.stages[PipelineStage.REPORT].status
+    if report_status != PipelineStageStatus.COMPLETED:
+      return metadata, None
+    if "Stage 'report'" not in str(error):
+      return metadata, None
+    issue = self._artifact_validator.report_completion_issue(artifact_plan=artifacts)
+    if issue is None:
+      return metadata, None
+    repaired_metadata = self._artifact_planner.reset_stages_to_planned(
+      metadata,
+      stages=(PipelineStage.REPORT, PipelineStage.PDF),
+    )
+    return (
+      repaired_metadata,
+      "Existing report artifacts were incomplete or inconsistent; rerunning report generation.",
+    )
 
-def _reset_report_stage_to_planned(metadata: PipelineMetadata) -> PipelineMetadata:
-  current = metadata.stages[PipelineStage.REPORT]
-  planned_stage = PipelineStageMetadata(
-    status=PipelineStageStatus.PLANNED,
-    resumable=True,
-    started_at=None,
-    finished_at=None,
-    updated_at=current.updated_at,
-    error=None,
-  )
-  return metadata.model_copy(
-    update={"stages": {**metadata.stages, PipelineStage.REPORT: planned_stage}}
+
+def _replace_stage_decision_reason(
+  *,
+  stage_decisions: tuple[StageDecision, ...],
+  stage: PipelineStage,
+  reason: str,
+) -> tuple[StageDecision, ...]:
+  return tuple(
+    decision.model_copy(update={"reason": reason})
+    if decision.stage == stage and decision.decision == PipelineStageDecision.PLANNED
+    else decision
+    for decision in stage_decisions
   )

@@ -229,6 +229,27 @@ class ArtifactPlanner:
     )
     return metadata.model_copy(update={"stages": {**metadata.stages, stage: updated_stage}})
 
+  def reset_stages_to_planned(
+    self,
+    metadata: PipelineMetadata,
+    *,
+    stages: tuple[PipelineStage, ...],
+  ) -> PipelineMetadata:
+    updated_stages = dict(metadata.stages)
+    for stage in stages:
+      current = metadata.stages[stage]
+      updated_stages[stage] = current.model_copy(
+        update={
+          "status": PipelineStageStatus.PLANNED,
+          "resumable": True,
+          "started_at": None,
+          "finished_at": None,
+          "updated_at": self._now(),
+          "error": None,
+        }
+      )
+    return metadata.model_copy(update={"stages": updated_stages})
+
   def record_transcription(
     self,
     metadata: PipelineMetadata,
@@ -351,6 +372,8 @@ class ArtifactRootValidator:
         )
       if stage == PipelineStage.TRANSCRIBE:
         self._validate_transcription_outputs(artifact_plan=artifact_plan)
+      if stage == PipelineStage.REPORT:
+        self._validate_report_outputs(artifact_plan=artifact_plan)
 
   def _validate_transcription_outputs(self, *, artifact_plan: ArtifactPlan) -> None:
     try:
@@ -373,6 +396,44 @@ class ArtifactRootValidator:
       raise ArtifactMetadataError(
         "Stage 'transcribe' is marked completed but transcript artifacts are inconsistent."
       )
+
+  def _validate_report_outputs(self, *, artifact_plan: ArtifactPlan) -> None:
+    issue = self.report_completion_issue(artifact_plan=artifact_plan)
+    if issue is None:
+      return
+    raise ArtifactMetadataError(
+      "Stage 'report' is marked completed but "
+      f"{issue} Re-run reporting to regenerate the report artifacts."
+    )
+
+  def report_completion_issue(
+    self,
+    *,
+    artifact_plan: ArtifactPlan,
+  ) -> str | None:
+    if missing_outputs := self.missing_outputs_for_stage(
+        artifact_plan=artifact_plan,
+        stage=PipelineStage.REPORT,
+    ):
+      missing_names = ", ".join(path.name for path in missing_outputs)
+      return f"required artifacts are missing: {missing_names}."
+
+    try:
+      prompt_text = artifact_plan.prompt_used.read_text(encoding="utf-8")
+      llm_response = artifact_plan.llm_response_raw.read_text(encoding="utf-8")
+      report_text = artifact_plan.report_markdown.read_text(encoding="utf-8")
+    except OSError as exc:
+      raise ArtifactMetadataError(
+        "Stage 'report' is marked completed but report artifacts could not be read."
+      ) from exc
+
+    if not prompt_text.strip():
+      return "'prompt_used.md' is empty."
+    if not llm_response.strip():
+      return "'llm_response_raw.txt' is empty."
+    if report_text != _normalize_report_text(llm_response):
+      return "'report.md' is inconsistent with 'llm_response_raw.txt'."
+    return None
 
   @staticmethod
   def outputs_for_stage(
@@ -407,6 +468,10 @@ class ArtifactRootValidator:
       for output_path in self.outputs_for_stage(artifact_plan=artifact_plan, stage=stage)
       if not output_path.exists()
     )
+
+
+def _normalize_report_text(text: str) -> str:
+  return text if text.endswith("\n") else f"{text}\n"
 
 
 class PipelineStatePlanner:

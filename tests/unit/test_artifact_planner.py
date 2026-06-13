@@ -2,13 +2,15 @@ from pathlib import Path
 
 import pytest
 
-from media_report.core.errors import ArtifactConflictError
+from media_report.core.errors import ArtifactConflictError, ArtifactMetadataError
 from media_report.domain.artifacts.entities import (
+  ArtifactPlan,
+  PipelineMetadata,
   PipelineStage,
   PipelineStageStatus,
   StageErrorSummary,
 )
-from media_report.domain.artifacts.service import ArtifactPlanner
+from media_report.domain.artifacts.service import ArtifactPlanner, ArtifactRootValidator
 from media_report.domain.media.entities import MediaKind, MediaSource
 
 
@@ -160,3 +162,75 @@ def test_mark_stage_failed_records_error_summary(tmp_path: Path) -> None:
   assert error.code == "output_missing"
   assert failed.stages[PipelineStage.NORMALIZE_AUDIO].finished_at is not None
   assert failed.stages[PipelineStage.NORMALIZE_AUDIO].resumable is True
+
+
+def _build_transcribed_metadata(
+  tmp_path: Path,
+) -> tuple[ArtifactPlanner, ArtifactPlan, PipelineMetadata]:
+  media_path = tmp_path / "meeting.mp3"
+  media_path.write_text("x", encoding="utf-8")
+  planner = ArtifactPlanner()
+  artifact_plan = planner.prepare_new(media_path)
+  source = MediaSource(path=media_path, kind=MediaKind.AUDIO)
+  metadata = planner.bootstrap_metadata(
+    source=source,
+    artifact_plan=artifact_plan,
+    template_name="generic",
+    llm_provider="ollama",
+    llm_model="llama3.1",
+    output_format="pdf",
+    language=None,
+    selected_stages=tuple(PipelineStage),
+  )
+  artifact_plan.audio_extracted.write_text("audio", encoding="utf-8")
+  artifact_plan.audio_normalized.write_text("audio", encoding="utf-8")
+  artifact_plan.transcript_raw.write_text("transcript", encoding="utf-8")
+  artifact_plan.transcript_segments.write_text(
+    '{"provider":"stub","model":"stub-small","requested_language":null,'
+    '"detected_language":"en","segments":[{"index":0,"start_seconds":0.0,'
+    '"end_seconds":1.0,"text":"transcript"}]}',
+    encoding="utf-8",
+  )
+  metadata = planner.mark_stage_completed(metadata, stage=PipelineStage.EXTRACT_AUDIO)
+  metadata = planner.mark_stage_completed(metadata, stage=PipelineStage.NORMALIZE_AUDIO)
+  metadata = planner.mark_stage_completed(metadata, stage=PipelineStage.TRANSCRIBE)
+  return planner, artifact_plan, metadata
+
+
+def test_report_completion_issue_detects_missing_raw_response(tmp_path: Path) -> None:
+  _, artifact_plan, _ = _build_transcribed_metadata(tmp_path)
+  artifact_plan.prompt_used.write_text("prompt", encoding="utf-8")
+  artifact_plan.report_markdown.write_text("# Report\n", encoding="utf-8")
+
+  issue = ArtifactRootValidator().report_completion_issue(artifact_plan=artifact_plan)
+
+  assert issue == "required artifacts are missing: llm_response_raw.txt."
+
+
+def test_report_completion_issue_detects_inconsistent_report_markdown(tmp_path: Path) -> None:
+  _, artifact_plan, _ = _build_transcribed_metadata(tmp_path)
+  artifact_plan.prompt_used.write_text("prompt", encoding="utf-8")
+  artifact_plan.llm_response_raw.write_text("# Report", encoding="utf-8")
+  artifact_plan.report_markdown.write_text("# Other\n", encoding="utf-8")
+
+  issue = ArtifactRootValidator().report_completion_issue(artifact_plan=artifact_plan)
+
+  assert issue == "'report.md' is inconsistent with 'llm_response_raw.txt'."
+
+
+def test_validator_rejects_completed_report_with_inconsistent_artifacts(tmp_path: Path) -> None:
+  planner, artifact_plan, metadata = _build_transcribed_metadata(tmp_path)
+  source = MediaSource(path=artifact_plan.root_dir.parent / "meeting.mp3", kind=MediaKind.AUDIO)
+  artifact_plan.prompt_used.write_text("prompt", encoding="utf-8")
+  artifact_plan.llm_response_raw.write_text("# Report", encoding="utf-8")
+  artifact_plan.report_markdown.write_text("# Other\n", encoding="utf-8")
+  metadata = planner.mark_stage_completed(metadata, stage=PipelineStage.REPORT)
+
+  with pytest.raises(ArtifactMetadataError) as exc_info:
+    ArtifactRootValidator().validate(
+      source=source,
+      artifact_plan=artifact_plan,
+      metadata=metadata,
+    )
+
+  assert "Re-run reporting to regenerate the report artifacts." in str(exc_info.value)

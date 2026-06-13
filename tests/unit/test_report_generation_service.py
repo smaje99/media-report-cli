@@ -198,3 +198,40 @@ def test_generate_report_updates_effective_provider_and_model(tmp_path: Path) ->
   assert result.remote_provider_selected is True
   assert metadata_payload["workflow"]["llm_provider"] == "openai-compatible"
   assert metadata_payload["workflow"]["llm_model"] == "gpt-4.1-mini"
+
+
+def test_generate_report_reuses_completed_report_without_calling_provider(tmp_path: Path) -> None:
+  media_path = tmp_path / "meeting.mp3"
+  media_path.write_text("audio", encoding="utf-8")
+  artifact_root = write_transcribed_artifact_root(media_path)
+  provider = StubLLMProvider(response="# Report\n\n- item")
+  service = build_service(provider=provider)
+
+  service.generate_report(GenerateReportRequest(input_path=artifact_root))
+  provider.calls.clear()
+
+  result = service.generate_report(GenerateReportRequest(input_path=artifact_root))
+
+  assert provider.calls == []
+  assert result.final_metadata.stages[PipelineStage.REPORT].status == PipelineStageStatus.COMPLETED
+  assert result.llm_response == "# Report\n\n- item"
+
+
+def test_generate_report_regenerates_when_completed_report_is_incomplete(tmp_path: Path) -> None:
+  media_path = tmp_path / "meeting.mp3"
+  media_path.write_text("audio", encoding="utf-8")
+  artifact_root = write_transcribed_artifact_root(media_path)
+  provider = StubLLMProvider(response="# Report\n\n- repaired")
+  service = build_service(provider=provider)
+
+  service.generate_report(GenerateReportRequest(input_path=artifact_root))
+  (artifact_root / "llm_response_raw.txt").unlink()
+  provider.calls.clear()
+
+  result = service.generate_report(GenerateReportRequest(input_path=artifact_root))
+  metadata_payload = json.loads((artifact_root / "metadata.json").read_text(encoding="utf-8"))
+
+  assert len(provider.calls) == 1
+  assert result.report_path.read_text(encoding="utf-8") == "# Report\n\n- repaired\n"
+  assert metadata_payload["stages"]["report"]["status"] == "completed"
+  assert metadata_payload["stages"]["pdf"]["status"] == "planned"

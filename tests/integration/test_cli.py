@@ -701,6 +701,48 @@ def test_process_only_report_warns_for_remote_provider(
   assert "remote provider selected" in result.stdout
 
 
+def test_report_command_reuses_completed_report_without_calling_provider(
+  tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+  monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+  artifact_root = write_resume_ready_metadata(single_media_path)
+  stub_reporting(monkeypatch, ollama_response="# Report\n\n- first")
+
+  first_result = runner.invoke(app, ["report", str(artifact_root)])
+  assert first_result.exit_code == 0
+
+  def fail_if_called(self, prompt: str, *, model: str) -> str:  # type: ignore[no-untyped-def]
+    raise AssertionError("provider should not be called when report artifacts are reusable")
+
+  monkeypatch.setattr(OllamaProvider, "generate", fail_if_called)
+
+  result = runner.invoke(app, ["report", str(artifact_root)])
+
+  assert result.exit_code == 0
+  assert "report: reused" in result.stdout
+
+
+def test_report_command_regenerates_when_completed_report_is_incomplete(
+  tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+  monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+  artifact_root = write_resume_ready_metadata(single_media_path)
+  stub_reporting(monkeypatch, ollama_response="# Report\n\n- first")
+  runner.invoke(app, ["report", str(artifact_root)])
+  (artifact_root / "llm_response_raw.txt").unlink()
+  stub_reporting(monkeypatch, ollama_response="# Report\n\n- repaired")
+
+  result = runner.invoke(app, ["report", str(artifact_root)])
+  metadata = json.loads((artifact_root / "metadata.json").read_text(encoding="utf-8"))
+
+  assert result.exit_code == 0
+  assert "report: planned" in result.stdout
+  assert "rerunning report generation" in result.stdout
+  assert (artifact_root / "report.md").read_text(encoding="utf-8") == "# Report\n\n- repaired\n"
+  assert metadata["stages"]["report"]["status"] == "completed"
+  assert metadata["stages"]["pdf"]["status"] == "planned"
+
+
 def test_process_directory_without_supported_media_exits_with_code_one(
   tmp_path: Path, monkeypatch
 ) -> None:

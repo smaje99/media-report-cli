@@ -47,7 +47,7 @@ def copy_fixture_tree(tmp_path: Path, fixtures_root: Path) -> Callable[[str], Pa
     destination = tmp_path / relative_path
 
     if not source.exists():
-      pytest.skip(reason=f"Optional fixture path is not available locally: {source}")  # ty:ignore[unknown-argument]
+      pytest.skip(reason=f"Optional fixture path is not available locally: {source}")
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     if source.is_dir():
@@ -82,7 +82,5 @@ def single_media_path(single_fixture_dir: Path) -> Path:
     if path.is_file() and path.suffix.lower() in SUPPORTED_MEDIA_EXTENSIONS
   )
   if not matches:
-    pytest.skip(
-      reason=f"No supported single-file media fixtures found in {single_fixture_dir}."  # ty:ignore[unknown-argument]
-    )
+    pytest.skip(reason=f"No supported single-file media fixtures found in {single_fixture_dir}.")
   return matches[0]
