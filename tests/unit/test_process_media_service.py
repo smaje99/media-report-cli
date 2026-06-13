@@ -5,6 +5,7 @@ from pathlib import Path
 
 from media_report.application.process_media.models import ProcessRequest
 from media_report.application.process_media.service import ProcessMediaService
+from media_report.application.reporting.models import GenerateReportRequest, GenerateReportResult
 from media_report.application.transcribe.models import TranscribeRequest, TranscribeResult
 from media_report.domain.artifacts.entities import PipelineStage, PipelineStageStatus
 from media_report.domain.artifacts.service import ArtifactPlanner
@@ -70,12 +71,63 @@ class StubTranscribeService:
     )
 
 
-def build_service(transcribe_service: StubTranscribeService) -> ProcessMediaService:
+class StubReportService:
+  def __init__(self) -> None:
+    self.calls: list[GenerateReportRequest] = []
+
+  def generate_report(self, request: GenerateReportRequest) -> GenerateReportResult:
+    self.calls.append(request)
+    metadata = JsonPipelineMetadataRepository().read(request.input_path / "metadata.json")
+    artifacts = ArtifactPlanner().plan(Path(metadata.source.path))
+    source_path = Path(metadata.source.path)
+    source_kind = FileSystemMediaScanner().classify(source_path).kind
+    updated_metadata = metadata.model_copy(
+      update={
+        "workflow": metadata.workflow.model_copy(
+          update={
+            "template_name": request.template_name or metadata.workflow.template_name,
+            "llm_provider": request.llm_provider or metadata.workflow.llm_provider,
+            "llm_model": request.llm_model or metadata.workflow.llm_model,
+            "selected_stages": request.workflow_selected_stages,
+          }
+        ),
+        "stages": {
+          **metadata.stages,
+          PipelineStage.REPORT: metadata.stages[PipelineStage.REPORT].model_copy(
+            update={"status": PipelineStageStatus.COMPLETED}
+          ),
+        },
+      }
+    )
+    JsonPipelineMetadataRepository().write(updated_metadata)
+    artifacts.prompt_used.write_text("prompt", encoding="utf-8")
+    artifacts.llm_response_raw.write_text("# Report", encoding="utf-8")
+    artifacts.report_markdown.write_text("# Report\n", encoding="utf-8")
+    return GenerateReportResult(
+      source=MediaSource(path=source_path, kind=source_kind),
+      artifacts=artifacts,
+      stage_decisions=(),
+      final_metadata=updated_metadata,
+      prompt_path=artifacts.prompt_used,
+      response_path=artifacts.llm_response_raw,
+      report_path=artifacts.report_markdown,
+      rendered_prompt="prompt",
+      llm_response="# Report",
+      report_text="# Report\n",
+      remote_provider_selected=updated_metadata.workflow.llm_provider != "ollama",
+    )
+
+
+def build_service(
+  transcribe_service: StubTranscribeService,
+  report_service: StubReportService | None = None,
+) -> ProcessMediaService:
   return ProcessMediaService(
     scanner=FileSystemMediaScanner(),
     templates=StubTemplateRepository(),
     metadata_repository=JsonPipelineMetadataRepository(),
     transcribe_service=transcribe_service,
+    report_service=report_service or StubReportService(),
   )
 
 
@@ -165,7 +217,8 @@ def test_process_only_report_does_not_delegate_to_transcribe_service(tmp_path: P
   media_path.write_text("audio", encoding="utf-8")
   write_resume_ready_metadata(media_path)
   transcribe_service = StubTranscribeService()
-  service = build_service(transcribe_service)
+  report_service = StubReportService()
+  service = build_service(transcribe_service, report_service=report_service)
 
   plan = service.process(
     ProcessRequest(
@@ -176,6 +229,37 @@ def test_process_only_report_does_not_delegate_to_transcribe_service(tmp_path: P
   )
 
   assert transcribe_service.calls == []
+  assert len(report_service.calls) == 1
+  assert report_service.calls[0].input_path.name == "meeting_media_report"
   assert plan.items[0].final_metadata.stages[PipelineStage.TRANSCRIBE].status == (
     PipelineStageStatus.COMPLETED
+  )
+  assert plan.items[0].final_metadata.stages[PipelineStage.REPORT].status == (
+    PipelineStageStatus.COMPLETED
+  )
+
+
+def test_process_only_report_overwrite_forces_report_rerun_only(tmp_path: Path) -> None:
+  media_path = tmp_path / "meeting.mp3"
+  media_path.write_text("audio", encoding="utf-8")
+  artifact_root = write_resume_ready_metadata(media_path)
+  transcribe_service = StubTranscribeService()
+  report_service = StubReportService()
+  service = build_service(transcribe_service, report_service=report_service)
+
+  service.process(
+    ProcessRequest(
+      input_path=media_path,
+      overwrite=True,
+      only_report=True,
+    )
+  )
+
+  assert transcribe_service.calls == []
+  assert len(report_service.calls) == 1
+  assert report_service.calls[0].overwrite is True
+  assert report_service.calls[0].input_path == artifact_root
+  assert report_service.calls[0].workflow_selected_stages == (
+    PipelineStage.REPORT,
+    PipelineStage.PDF,
   )

@@ -49,6 +49,7 @@ class ReportGenerationService:
         input_path=request.input_path,
         template_name=request.template_name,
         overwrite=request.overwrite,
+        workflow_selected_stages=request.workflow_selected_stages,
       )
     )
     metadata = self._update_effective_workflow(prompt_result.final_metadata, request=request)
@@ -198,7 +199,7 @@ class ReportGenerationService:
       llm_model=request.llm_model or metadata.workflow.llm_model,
       output_format=metadata.workflow.output_format,
       language=metadata.workflow.language,
-      selected_stages=metadata.workflow.selected_stages,
+      selected_stages=request.workflow_selected_stages,
     )
 
 

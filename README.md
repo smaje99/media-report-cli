@@ -49,6 +49,7 @@ uv tool install .
 ```bash
 media-report process PATH [OPTIONS]
 media-report transcribe PATH [OPTIONS]
+media-report report PATH [OPTIONS]
 media-report doctor
 media-report config init
 media-report config show
@@ -62,6 +63,7 @@ Version `0.1.0` treats the current bootstrap CLI surface as stable:
 - Root command: `media-report`
 - Stable bootstrap commands: `process`, `doctor`, `config init`, `config show`, `templates list`
 - Public stage command: `transcribe`
+- Public reporting command: `report`
 - Additive evolution only for new public options and commands
 
 `media-report process` keeps all currently visible flags public, with these current semantics:
@@ -77,6 +79,14 @@ Version `0.1.0` treats the current bootstrap CLI surface as stable:
 `media-report transcribe` accepts a single media file or a reusable artifact directory and exposes:
 
 - `--language`
+- `--model`
+- `--overwrite`
+
+`media-report report` accepts a reusable artifact directory or a media-file alias that resolves to
+its sibling artifact root, and exposes:
+
+- `--template`
+- `--provider`
 - `--model`
 - `--overwrite`
 
@@ -101,6 +111,8 @@ media-report process ./lecture.mp3 --provider openai-compatible --model gpt-4.1-
 media-report process ./lecture.mp3 --resume --only-report
 media-report transcribe ./lecture.mp3 --language es
 media-report transcribe ./lecture_media_report --overwrite
+media-report report ./lecture_media_report --template technical_report
+media-report report ./lecture.mp3 --provider openai-compatible --model gpt-4.1-mini
 media-report doctor
 media-report config init
 ```
@@ -112,7 +124,9 @@ media-report config init
 - Creates per-file artifact directories next to the source media
 - Executes `extract_audio`, `normalize_audio`, and `transcribe` during `process`
 - Exposes `transcribe` as a reusable single-input stage command
+- Exposes `report` as a reusable single-input stage command over completed transcription artifacts
 - Persists `transcript_raw.txt` and `transcript_segments.json`
+- Persists `prompt_used.md`, `llm_response_raw.txt`, and `report.md`
 - Writes and updates `metadata.json` and `pipeline.log`
 - Reuses valid sibling artifact directories when invoked with `--resume`
 - Validates existing metadata strictly before executing a resumed run
@@ -122,8 +136,10 @@ media-report config init
 - Checks external tooling availability with `doctor`
 - Manages config at `~/.config/media-report/config.toml`
 
-Audio preparation through FFmpeg and local transcription through `faster-whisper` are wired into
-`process` and `transcribe`. LLM generation and PDF rendering remain planned for later phases.
+Audio preparation through FFmpeg, local transcription through `faster-whisper`, and LLM-backed
+Markdown report generation are wired into the current CLI. PDF rendering remains planned for a
+later phase, and default `process` still stops operationally at transcription unless
+`--only-report` is used with reusable artifacts.
 
 ## External Dependencies
 

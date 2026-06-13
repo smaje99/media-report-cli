@@ -21,6 +21,8 @@ from media_report.infrastructure.filesystem.metadata_repository import (
 )
 from media_report.infrastructure.filesystem.scanner import FileSystemMediaScanner
 from media_report.infrastructure.llm import LLMCapability
+from media_report.infrastructure.llm.ollama_provider import OllamaProvider
+from media_report.infrastructure.llm.openai_compatible_provider import OpenAICompatibleProvider
 from media_report.infrastructure.transcription import FasterWhisperProvider, TranscriptionCapability
 from media_report.infrastructure.transcription.capabilities import TRANSCRIPTION_INSTALL_HINT
 
@@ -170,6 +172,22 @@ def write_resume_ready_metadata(media_path: Path) -> Path:
   return artifact_plan.root_dir
 
 
+def stub_reporting(
+  monkeypatch,
+  *,
+  ollama_response: str = "# Report\n\n- item",
+  openai_response: str = "# Remote Report\n\n- item",
+) -> None:
+  def fake_ollama_generate(self, prompt: str, *, model: str) -> str:  # type: ignore[no-untyped-def]
+    return ollama_response
+
+  def fake_openai_generate(self, prompt: str, *, model: str) -> str:  # type: ignore[no-untyped-def]
+    return openai_response
+
+  monkeypatch.setattr(OllamaProvider, "generate", fake_ollama_generate)
+  monkeypatch.setattr(OpenAICompatibleProvider, "generate", fake_openai_generate)
+
+
 def test_root_help_exposes_bootstrap_contract() -> None:
   result = runner.invoke(app, ["--help"])
 
@@ -177,6 +195,7 @@ def test_root_help_exposes_bootstrap_contract() -> None:
   assert "Process local media" in result.stdout
   assert "process" in result.stdout
   assert "transcribe" in result.stdout
+  assert "report" in result.stdout
   assert "doctor" in result.stdout
   assert "config" in result.stdout
   assert "templates" in result.stdout
@@ -190,6 +209,7 @@ def test_root_without_arguments_shows_help() -> None:
   assert "Usage: media-report" in combined_output(result)
   assert "process" in combined_output(result)
   assert "transcribe" in combined_output(result)
+  assert "report" in combined_output(result)
   assert "doctor" in combined_output(result)
 
 
@@ -221,6 +241,15 @@ def test_transcribe_help_documents_public_flags() -> None:
   assert result.exit_code == 0
   assert "Transcribe a media file or reusable artifact directory." in result.stdout
   for flag in ("--language", "--model", "--overwrite"):
+    assert flag in result.stdout
+
+
+def test_report_help_documents_public_flags() -> None:
+  result = runner.invoke(app, ["report", "--help"])
+
+  assert result.exit_code == 0
+  assert "Generate a report from a reusable artifact directory." in result.stdout
+  for flag in ("--template", "--provider", "--model", "--overwrite"):
     assert flag in result.stdout
 
 
@@ -483,6 +512,7 @@ def test_process_resume_reuses_completed_transcription_artifacts(
 ) -> None:
   monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
   stub_media_processing(monkeypatch)
+  stub_reporting(monkeypatch)
   artifact_root = write_resume_ready_metadata(single_media_path)
 
   result = runner.invoke(app, ["process", str(single_media_path), "--resume", "--only-report"])
@@ -506,6 +536,51 @@ def test_process_resume_reuses_completed_transcription_artifacts(
   )
 
 
+def test_report_command_generates_markdown_from_artifact_root(
+  tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+  monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+  artifact_root = write_resume_ready_metadata(single_media_path)
+  stub_reporting(monkeypatch)
+
+  result = runner.invoke(app, ["report", str(artifact_root), "--template", "technical_report"])
+
+  assert result.exit_code == 0
+  assert (artifact_root / "report.md").read_text(encoding="utf-8") == "# Report\n\n- item\n"
+  assert "report status: completed" in result.stdout
+  assert "pdf status: planned" in result.stdout
+
+
+def test_report_command_resolves_media_file_to_artifact_root(
+  tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+  monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+  artifact_root = write_resume_ready_metadata(single_media_path)
+  stub_reporting(monkeypatch)
+
+  result = runner.invoke(app, ["report", str(single_media_path)])
+
+  assert result.exit_code == 0
+  assert (artifact_root / "report.md").exists()
+  assert "Processed 1 artifact directory." in result.stdout
+
+
+def test_report_command_fails_before_provider_when_prerequisites_are_missing(
+  tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+  monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+  artifact_root = write_resume_ready_metadata(single_media_path)
+  (artifact_root / "transcript_segments.json").unlink()
+  stub_reporting(monkeypatch)
+
+  result = runner.invoke(app, ["report", str(artifact_root)])
+
+  assert result.exit_code == 1
+  assert "required artifacts are" in result.stdout
+  assert "missing: transcript_segments.json" in result.stdout
+  assert "report.md" not in {path.name for path in artifact_root.iterdir() if path.is_file()}
+
+
 def assert_stdout_contains_all(
   first_fragment: str,
   result,  # type: ignore[no-untyped-def]
@@ -520,14 +595,15 @@ def test_process_overwrite_warns_and_behaves_like_resume(
   tmp_path: Path, monkeypatch, single_media_path: Path
 ) -> None:
   monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
-  stub_media_processing(monkeypatch)
+  stub_reporting(monkeypatch)
   write_resume_ready_metadata(single_media_path)
 
   result = runner.invoke(app, ["process", str(single_media_path), "--overwrite", "--only-report"])
 
   assert result.exit_code == 0
   assert "--overwrite is deprecated" in result.stdout
-  assert "report: planned" in result.stdout
+  assert "report: reused" in result.stdout or "report: planned" in result.stdout
+  assert "report status: completed" in result.stdout
 
 
 def test_process_resume_fails_for_corrupt_metadata(
@@ -576,6 +652,53 @@ def test_process_resume_fails_for_incomplete_completed_stage(
   assert result.exit_code == 1
   assert "required artifacts are" in result.stdout
   assert "missing: transcript_segments.json" in result.stdout
+
+
+def test_process_only_report_executes_reporting_from_existing_artifacts(
+  tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+  monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+  artifact_root = write_resume_ready_metadata(single_media_path)
+  stub_reporting(monkeypatch)
+
+  result = runner.invoke(app, ["process", str(single_media_path), "--resume", "--only-report"])
+
+  assert result.exit_code == 0
+  assert (artifact_root / "report.md").read_text(encoding="utf-8") == "# Report\n\n- item\n"
+  assert "report status: completed" in result.stdout
+  assert "pdf status: planned" in result.stdout
+
+
+def test_report_command_warns_for_remote_provider(
+  tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+  monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+  monkeypatch.setenv("MEDIA_REPORT_LLM_PROVIDER", "openai-compatible")
+  monkeypatch.setenv("MEDIA_REPORT_OPENAI_API_KEY", "sk-test-secret")
+  monkeypatch.setenv("MEDIA_REPORT_OPENAI_BASE_URL", "https://example.test/v1")
+  artifact_root = write_resume_ready_metadata(single_media_path)
+  stub_reporting(monkeypatch)
+
+  result = runner.invoke(app, ["report", str(artifact_root)])
+
+  assert result.exit_code == 0
+  assert "remote provider selected" in result.stdout
+
+
+def test_process_only_report_warns_for_remote_provider(
+  tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+  monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+  monkeypatch.setenv("MEDIA_REPORT_LLM_PROVIDER", "openai-compatible")
+  monkeypatch.setenv("MEDIA_REPORT_OPENAI_API_KEY", "sk-test-secret")
+  monkeypatch.setenv("MEDIA_REPORT_OPENAI_BASE_URL", "https://example.test/v1")
+  write_resume_ready_metadata(single_media_path)
+  stub_reporting(monkeypatch)
+
+  result = runner.invoke(app, ["process", str(single_media_path), "--resume", "--only-report"])
+
+  assert result.exit_code == 0
+  assert "remote provider selected" in result.stdout
 
 
 def test_process_directory_without_supported_media_exits_with_code_one(

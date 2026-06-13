@@ -6,9 +6,12 @@ from rich.console import Console
 from rich.table import Table
 
 from media_report.application.process_media.models import ProcessPlanItem
+from media_report.application.reporting.models import GenerateReportResult
 from media_report.application.transcribe.models import TranscribeResult
 from media_report.cli.presentation.pipeline_runs import (
+  REPORT_DISPLAY_STAGES,
   build_process_runs_table,
+  build_report_run_table,
   build_run_detail_lines,
   build_transcribe_run_table,
   format_stage_decisions,
@@ -25,9 +28,7 @@ from media_report.domain.media.entities import MediaKind, MediaSource
 from media_report.domain.transcription.entities import (
   TranscriptionResult as DomainTranscriptionResult,
 )
-from media_report.domain.transcription.entities import (
-  TranscriptionSegment,
-)
+from media_report.domain.transcription.entities import TranscriptionSegment
 
 
 def render_table(table: Table) -> str:
@@ -168,3 +169,42 @@ def test_build_run_detail_lines_preserves_runtime_and_status_lines(tmp_path: Pat
   assert f"{media_path.name} :: extract_audio status: completed" in lines
   assert any("transcription runtime: faster-whisper/small device=cpu" in line for line in lines)
   assert any("transcription fallback:" in line for line in lines)
+
+
+def test_build_report_run_table_renders_report_and_pdf_statuses(tmp_path: Path) -> None:
+  media_path = tmp_path / "meeting.mp3"
+  artifacts, metadata = build_metadata(media_path)
+  result = GenerateReportResult(
+    source=MediaSource(path=media_path, kind=MediaKind.AUDIO),
+    artifacts=artifacts,
+    stage_decisions=build_stage_decisions(),
+    final_metadata=metadata,
+    prompt_path=artifacts.prompt_used,
+    response_path=artifacts.llm_response_raw,
+    report_path=artifacts.report_markdown,
+    rendered_prompt="prompt",
+    llm_response="# Report",
+    report_text="# Report\n",
+    remote_provider_selected=False,
+  )
+
+  rendered = render_table(build_report_run_table(result))
+
+  assert "Report Run" in rendered
+  assert "report: skipped" in rendered
+  assert "pdf: skipped" in rendered
+
+
+def test_build_run_detail_lines_can_render_report_visible_stages(tmp_path: Path) -> None:
+  media_path = tmp_path / "meeting.mp3"
+  _, metadata = build_metadata(media_path)
+
+  lines = build_run_detail_lines(
+    source_name=media_path.name,
+    stage_decisions=build_stage_decisions(),
+    metadata=metadata,
+    visible_stages=REPORT_DISPLAY_STAGES,
+  )
+
+  assert f"{media_path.name} :: report status: skipped" in lines
+  assert f"{media_path.name} :: pdf status: skipped" in lines

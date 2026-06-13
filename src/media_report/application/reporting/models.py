@@ -13,6 +13,7 @@ from media_report.domain.artifacts.entities import (
 from media_report.domain.media.entities import MediaSource
 
 DEFAULT_RENDER_PROMPT_STAGES = (PipelineStage.REPORT,)
+DEFAULT_GENERATE_REPORT_STAGES = (PipelineStage.REPORT, PipelineStage.PDF)
 
 
 class RenderPromptRequest(BaseModel):
@@ -52,6 +53,7 @@ class GenerateReportRequest(BaseModel):
   llm_provider: str | None = None
   llm_model: str | None = None
   overwrite: bool = False
+  workflow_selected_stages: tuple[PipelineStage, ...] = DEFAULT_GENERATE_REPORT_STAGES
 
 
 class GenerateReportResult(BaseModel):

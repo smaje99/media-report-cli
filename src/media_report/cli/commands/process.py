@@ -9,6 +9,8 @@ from rich.markup import escape
 from media_report.application.process_media.models import ProcessRequest
 from media_report.cli.bootstrap import build_process_service
 from media_report.cli.presentation.pipeline_runs import (
+  REPORT_DISPLAY_STAGES,
+  TRANSCRIPTION_DISPLAY_STAGES,
   build_process_runs_table,
   build_run_detail_lines,
 )
@@ -120,12 +122,14 @@ def process_command(
       "[yellow]Warning:[/yellow] remote provider selected. Transcripts may leave the local machine."
     )
 
-  console.print(build_process_runs_table(plan.items))
+  visible_stages = REPORT_DISPLAY_STAGES if only_report else TRANSCRIPTION_DISPLAY_STAGES
+  console.print(build_process_runs_table(plan.items, visible_stages=visible_stages))
   for item in plan.items:
     for line in build_run_detail_lines(
       source_name=item.source.path.name,
       stage_decisions=item.stage_decisions,
       metadata=item.final_metadata,
+      visible_stages=visible_stages,
     ):
       console.print(line)
   console.print(

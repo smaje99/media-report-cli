@@ -5,6 +5,7 @@ import typer
 from media_report.cli.commands.config import config_app
 from media_report.cli.commands.doctor import doctor_command
 from media_report.cli.commands.process import process_command
+from media_report.cli.commands.report import report_command
 from media_report.cli.commands.templates import templates_app
 from media_report.cli.commands.transcribe import transcribe_command
 
@@ -22,6 +23,10 @@ app.command(
   "transcribe",
   help="Transcribe a media file or reusable artifact directory.",
 )(transcribe_command)
+app.command(
+  "report",
+  help="Generate a report from a reusable artifact directory.",
+)(report_command)
 app.command(
   "doctor",
   help="Inspect the local bootstrap environment and packaged resources.",

@@ -46,6 +46,7 @@ def build_process_service(settings: AppSettings) -> ProcessMediaService:
     templates=PackagePromptTemplateRepository(),
     metadata_repository=metadata_repository,
     transcribe_service=transcribe_service,
+    report_service=build_report_generation_service(settings),
   )
 
 
