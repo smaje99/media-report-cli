@@ -1223,42 +1223,90 @@ Scenario: Invalidar reporting incompleto
 - Objetivo del sprint: completar el pipeline hasta `report.pdf` y consolidar `process` como workflow principal extremo a extremo.
 - Alcance:
   - `DocumentRenderer` real con Pandoc y template empaquetada;
-  - persistencia de `report.pdf`;
-  - orquestación completa de `process`;
+  - persistencia de `report.pdf` como artifact obligatorio de la etapa `pdf`;
+  - cierre end-to-end de `process` con `extract_audio`, `normalize_audio`, `transcribe`, `report` y `pdf`;
+  - ejecución implícita de `pdf` también desde `report` cuando el workflow efectivo lo exija;
   - preservación de `report.md` y metadata coherente ante fallos parciales de PDF.
 - Fuera de alcance:
   - QA visual profunda de PDF;
-  - múltiples themes o engines configurables;
+  - múltiples themes o templates PDF configurables;
+  - configuración pública de engine TeX;
+  - comando público `media-report pdf`;
   - optimizaciones de rendimiento.
 - Entregables:
   - etapa `pdf` operativa;
   - `process` produce `report.md` y `report.pdf` cuando el entorno lo permite;
-  - manejo claro de fallo parcial conservando Markdown.
+  - `report` puede cerrar `report.pdf` sobre artifact roots reutilizables o media-file alias;
+  - manejo claro de fallo parcial conservando Markdown y permitiendo reintento seguro de PDF.
 - Dependencias: Sprint 05.
 - Riesgos:
   - `pandoc` o engine TeX ausentes;
   - diferencias tipográficas entre plataformas;
-  - pipeline más largo y frágil si la orquestación no queda limpia.
+  - pipeline más largo y frágil si la orquestación no queda limpia;
+  - falso reuse si `report.md` es válido pero `pdf` quedó incompleto o fallido.
 - Criterio de salida:
   - `process` produce `report.pdf` o deja trazabilidad clara de por qué falló sin destruir `report.md`.
+- Tareas transversales:
+  - mantener la separación hexagonal actual, sin crear una capa extra de orquestación para PDF;
+  - preservar `schema_version=2` y la compatibilidad de `metadata.json`;
+  - mantener `workflow.output_format` como selector real del destino final del workflow, soportando solo `pdf` en este sprint;
+  - asegurar que `process`, `report` y `doctor` mantengan mensajes accionables, estados observables y redacción segura;
+  - sostener la política de tests con subprocess y dependencias externas fakeadas o stubbeadas.
+- Dependencias internas:
+  - reutilizar `ReportGenerationService` como caso de uso compartido para `report` y `pdf`;
+  - extender `ArtifactRootValidator`, `ArtifactPlanner` y `PipelineStatePlanner` para la semántica real de reuse de `pdf`;
+  - reutilizar `importlib.resources` y el árbol `src/media_report/templates/pdf/default.tex`;
+  - mantener la presentación Rich ya usada por `process`, `transcribe` y `report`, ampliando solo la visibilidad de estados cuando aplique.
+- Riesgos técnicos concretos:
+  - que el adapter PDF funcione desde checkout pero no desde wheel instalada por resolución incorrecta de resources;
+  - que `report` quede marcado como `completed` y `pdf` como `reused` aunque el artifact `report.pdf` no exista;
+  - que el fallback `xelatex -> lualatex` exista en el adapter pero no sea visible en `doctor` ni en `pipeline.log`;
+  - que `process` vuelva a duplicar lógica de reporting en vez de extender el caso de uso compartido;
+  - que los errores de `pandoc` filtren stderr crudo o información poco accionable en consola.
+- Decisiones cerradas para el sprint:
+  - `process` pasa a ejecutar el pipeline completo hasta `pdf` por defecto;
+  - `report` también intentará `pdf` implícitamente en Sprint 06 cuando el workflow efectivo incluya esa etapa;
+  - `workflow.output_format` deja de ser decorativo y en este sprint solo soporta `pdf`;
+  - la política del engine será `xelatex` primero y `lualatex` como fallback;
+  - si `report.md` quedó bien pero `pdf` falla, el comando sale non-zero, preserva Markdown y marca `pdf=failed`;
+  - si `report.md` ya es reutilizable pero `report.pdf` falta o falló, se reusa Markdown y se reintenta solo `pdf`;
+  - no se agregará un artifact nuevo de debugging PDF; el diagnóstico vive en `metadata.json` y `pipeline.log`;
+  - `doctor` conserva `cmd:pandoc`, `cmd:xelatex` y `cmd:lualatex`, pero suma una capability compuesta `pdf`.
+- Cambios importantes de interfaces y tipos:
+  - el port estable sigue siendo `DocumentRenderer.render(markdown_path, pdf_path)`;
+  - `ReportGenerationService` se amplía para cerrar también la etapa `pdf` cuando `workflow_selected_stages` y `workflow.output_format` lo requieran;
+  - `workflow.output_format` pasa a condicionar la etapa final efectiva en vez de persistirse solo como metadata;
+  - `doctor` gana una capability compuesta de PDF sin eliminar el detalle por comandos;
+  - no se introduce un nuevo comando público `pdf`, ni configuración pública de engine, ni artifacts adicionales como `pdf_error.txt`.
+- Escenarios de prueba de referencia:
+  - `media-report process archivo.mp4` genera `report.md` y `report.pdf` cuando `pandoc` y al menos un engine TeX están disponibles;
+  - `media-report report artifact_root` reutiliza `report.md` válido y genera `report.pdf` sin volver a invocar al LLM;
+  - `media-report report media_file_alias` resuelve el artifact root hermano y cierra `pdf`;
+  - si `pandoc` o el engine fallan, `report.md` sigue intacto, `report` sigue `completed`, `pdf` queda `failed` y el comando sale non-zero;
+  - si `report.pdf` falta pero `report.md` es válido, una nueva ejecución reintenta solo `pdf`;
+  - `doctor` distingue PDF listo, `pandoc` ausente, engines ausentes o template empaquetada no resoluble.
 
 #### WI-06-01 - Implementar `DocumentRenderer` y adapter de Pandoc
 
 - Estado: planificado
 - Objetivo: renderizar PDF desde Markdown usando resources empaquetados.
-- Contexto técnico: `PandocService.build_command()` ya existe, pero aún no ejecuta ni resuelve template desde package resources.
+- Contexto técnico: `PandocService.build_command()` ya existe, pero aún no ejecuta ni resuelve template desde package resources, y el port `DocumentRenderer` sigue sin adapter real.
 - Alcance:
   - cargar `default.tex` con `importlib.resources`;
-  - ejecutar `pandoc` con engine soportado;
-  - persistir `report.pdf`.
+  - ejecutar `pandoc` con `xelatex` y fallback a `lualatex`;
+  - persistir `report.pdf`;
+  - mapear fallos de subprocess a errores tipados de PDF con mensaje resumido y redactado;
+  - exponer en `doctor` una capability `pdf` compuesta que resuma template, `pandoc` y engine efectivo disponible.
 - No se tocará:
   - themes múltiples;
   - edición avanzada de LaTeX;
+  - selección pública de engine por flag o config;
   - importación PDF como input.
 - Cambios esperados:
   - `DocumentRenderer` operativo;
-  - `doctor` puede endurecer validación de `pandoc` y engines TeX.
-- Gherkin:
+  - `PandocService` deja de ser un builder aislado y pasa a respaldar un adapter ejecutable;
+  - `doctor` informa si PDF está realmente usable, no solo si hay binarios sueltos en `PATH`.
+- Gherkin ampliado:
 
 ```gherkin
 Scenario: Renderizar PDF desde report.md
@@ -1266,37 +1314,89 @@ Scenario: Renderizar PDF desde report.md
   When ejecuto la etapa PDF
   Then se genera "report.pdf"
   And la metadata marca "pdf" como completada
+
+Scenario: Usar fallback a lualatex cuando xelatex no está disponible
+  Given "pandoc" está disponible
+  And "xelatex" no está disponible
+  And "lualatex" sí está disponible
+  When ejecuto la etapa PDF
+  Then se genera "report.pdf"
+  And el log registra que se usó el fallback de engine
+
+Scenario: Fallar con prerequisito de template o toolchain ausente
+  Given falta "pandoc" o no puede resolverse "default.tex"
+  When intento renderizar PDF
+  Then la etapa "pdf" falla con error tipado y accionable
+  And la salida no expone stderr crudo ni secretos
+
+Scenario: Persistir error resumido cuando Pandoc devuelve fallo
+  Given un "report.md" válido
+  And "pandoc" devuelve error de subprocess
+  When ejecuto la etapa PDF
+  Then la metadata registra "pdf" como "failed"
+  And "pipeline.log" persiste un resumen redactado del fallo
 ```
 
 - Pruebas:
-  - unitarias del adapter y resolución de resources;
-  - integración con subprocess fake;
-  - smoke test instalado cuando el entorno tenga dependencias.
-- Checklist:
-  - [ ] La template se resuelve desde package resources.
-  - [ ] `report.pdf` se persiste.
-  - [ ] Los errores de `pandoc` o TeX se mapean a errores tipados.
-- Preguntas de cierre:
+  - unitarias del adapter PDF, selección de engine y resolución de resources;
+  - unitarias del mapeo de errores de subprocess a errores tipados de dominio/aplicación;
+  - integración con subprocess fake para nominal, fallback y error;
+  - smoke test instalado cuando el entorno tenga dependencias reales.
+- Desglose de tareas:
+  - Arquitectura:
+    - definir el adapter concreto de `DocumentRenderer` en infraestructura sin mover el port de dominio;
+    - encapsular la selección de engine dentro del adapter o helper asociado, no en CLI ni en aplicación.
+  - Negocio/valor:
+    - convertir `report.pdf` en salida reproducible del pipeline sin obligar al usuario a un comando nuevo;
+    - hacer visible cuándo el entorno local sí soporta PDF y cuándo no.
+  - Funcional:
+    - resolver `default.tex` desde package resources;
+    - ejecutar `pandoc` con `xelatex` o `lualatex`;
+    - persistir `report.pdf`;
+    - resumir y persistir fallos de `pandoc` o del engine.
+  - No funcional:
+    - evitar dependencia en paths relativos del repo;
+    - asegurar redacción segura y mensajes accionables;
+    - mantener comportamiento consistente en Linux y macOS.
+  - Pruebas:
+    - cubrir nominal, fallback, template ausente, `pandoc` ausente y error del engine;
+    - validar que el adapter siga siendo fakeable desde tests.
+  - Documentación/aceptación:
+    - actualizar backlog con capability PDF en `doctor`;
+    - dejar explícito que no existe comando público `pdf`.
+- Checklist de implementación:
+  - [ ] El port `DocumentRenderer` está cableado a un adapter real, no solo definido.
+  - [ ] La template se resuelve desde package resources también desde wheel instalada.
+  - [ ] `report.pdf` se persiste y la metadata cambia a `completed`.
+  - [ ] El fallback `xelatex -> lualatex` existe y queda reflejado en `doctor` o en el log.
+  - [ ] Los errores de `pandoc` o TeX se mapean a errores tipados y resumidos.
+  - [ ] El adapter funciona sin introducir paths relativos al repo.
+- Preguntas de definición y cierre:
   - [ ] ¿El render funciona igual desde wheel instalada?
-  - [ ] ¿Los fallos incluyen stderr resumido útil?
+  - [ ] ¿Los fallos incluyen stderr resumido útil sin crear artifacts nuevos?
+  - [ ] ¿`doctor` puede distinguir entorno PDF incompleto de entorno listo?
 
 #### WI-06-02 - Cerrar la orquestación completa de `process`
 
 - Estado: planificado
-- Objetivo: convertir `process` en la ruta principal end-to-end reutilizando los mismos casos de uso de `transcribe`, `report` y `pdf`.
-- Contexto técnico: `process` hoy llega hasta transcripción y deja `report`/`pdf` solo planificados.
+- Objetivo: convertir `process` en la ruta principal end-to-end reutilizando los mismos casos de uso de `transcribe`, `report` y `pdf`, sin crear una capa adicional de orquestación.
+- Contexto técnico: `process` hoy llega hasta transcripción y deja `report`/`pdf` solo planificados; `ReportGenerationService` ya es la fuente única de verdad de reporting y debe ampliarse para cerrar también `pdf`.
 - Alcance:
   - ejecutar audio, transcripción, reporting y PDF según decisions;
   - respetar `--only-transcribe` y `--only-report`;
-  - mantener compatibilidad total del comando público.
+  - mantener compatibilidad total del comando público;
+  - hacer que `process` nominal ejecute `extract_audio -> normalize_audio -> transcribe -> report -> pdf`;
+  - hacer que `report` también intente `pdf` cuando el workflow efectivo lo requiera.
 - No se tocará:
   - daemonización;
   - colas de trabajo;
-  - TUI.
+  - TUI;
+  - soporte multi-formato más allá de `pdf`.
 - Cambios esperados:
   - `process` deja de ser “transcription-ready” y pasa a ser pipeline principal completo;
-  - resumen de consola más orientado a estado por etapa.
-- Gherkin:
+  - `ReportGenerationService` deja de cerrar solo `report` y pasa a controlar también la cola `pdf` cuando corresponda;
+  - resumen de consola más orientado a estado por etapa, incluyendo `reused`, `running`, `completed`, `failed` y `skipped`.
+- Gherkin ampliado:
 
 ```gherkin
 Scenario: Ejecutar pipeline completo
@@ -1304,36 +1404,86 @@ Scenario: Ejecutar pipeline completo
   When ejecuto "media-report process archivo.mp4"
   Then se generan transcriptos, "report.md" y "report.pdf"
   And cada etapa queda trazada en metadata y pipeline.log
+
+Scenario: Reusar etapas upstream y ejecutar solo PDF pendiente
+  Given un artifact root donde "report.md" es reutilizable
+  And "report.pdf" falta
+  When ejecuto "media-report process archivo.mp4 --resume"
+  Then no se vuelve a invocar al provider LLM
+  And solo la etapa "pdf" se planifica y ejecuta
+
+Scenario: Mantener la semántica actual de only-report
+  Given un artifact root con transcripción válida
+  When ejecuto "media-report process archivo.mp4 --resume --only-report"
+  Then se reutilizan los artifacts upstream
+  And el caso de uso compartido cierra "report" y "pdf" si corresponden
+
+Scenario: Rechazar un output_format no soportado en Sprint 06
+  Given una invocación con un formato de salida distinto de "pdf"
+  When intento ejecutar el workflow completo
+  Then el comando falla con error accionable
+  And no deja metadata ambigua sobre la etapa final
 ```
 
 - Pruebas:
-  - integración CLI con doubles de todas las etapas;
-  - casos de fallo parcial en reporting y PDF;
-  - compatibilidad con resume por etapa.
-- Checklist:
-  - [ ] `process` reutiliza los casos de uso de `transcribe`, `report` y `pdf`.
-  - [ ] El resumen por etapa distingue `planned`, `reused`, `completed` y `failed`.
-  - [ ] La compatibilidad de flags existentes se preserva.
-- Preguntas de cierre:
+  - integración CLI con doubles de transcribe, report y render PDF;
+  - casos de reuse completo, reuse parcial y fallo parcial en PDF;
+  - compatibilidad con resume por etapa y con `report` como entrada pública alternativa;
+  - validación de estados visibles en la presentación Rich.
+- Desglose de tareas:
+  - Arquitectura:
+    - ampliar `ReportGenerationService` para cerrar `pdf` sin crear un nuevo orquestador;
+    - mantener `ProcessMediaService` como coordinador de aplicación y reutilizador de casos de uso.
+  - Negocio/valor:
+    - convertir `process` en el comando principal real de punta a punta;
+    - reducir reruns costosos reusando transcripción y Markdown cuando ya sean válidos.
+  - Funcional:
+    - ejecutar por defecto hasta `pdf`;
+    - conservar `--only-transcribe` y `--only-report`;
+    - formalizar `output_format=pdf` como único formato soportado del sprint;
+    - alinear `report` para que también pueda cerrar `pdf`.
+  - No funcional:
+    - evitar duplicación de lógica entre `process` y `report`;
+    - mantener metadata y filesystem consistentes ante success, reuse y failure;
+    - dejar logs suficientes para comprender reuse y fallback.
+  - Pruebas:
+    - cubrir nominal end-to-end, `resume`, `only-report`, `only-transcribe` y formato inválido;
+    - validar que el LLM no se invoca cuando solo falta `pdf`.
+  - Documentación/aceptación:
+    - alinear backlog con el nuevo rol de `process` como workflow principal real;
+    - dejar explícito que no se crea comando `pdf`.
+- Checklist de implementación:
+  - [ ] `process` reutiliza los casos de uso de `transcribe`, `report` y `pdf` sin duplicar lógica.
+  - [ ] `ReportGenerationService` puede cerrar también la etapa `pdf`.
+  - [ ] El resumen por etapa distingue `planned`, `reused`, `running`, `completed`, `failed` y `skipped`.
+  - [ ] `process --only-transcribe` y `process --only-report` preservan semántica pública compatible.
+  - [ ] `workflow.output_format` deja de ser decorativo y se valida como selector real del destino final.
+  - [ ] Un `report.md` reutilizable evita un rerun innecesario del provider LLM cuando solo falta `pdf`.
+- Preguntas de definición y cierre:
   - [ ] ¿`process` sigue siendo el contrato principal sin duplicar lógica?
   - [ ] ¿La reanudación conserva consistencia entre metadata y filesystem?
+  - [ ] ¿`report` y `process --only-report` conservan la misma semántica de reuse y failure?
 
 #### WI-06-03 - Preservar `report.md` y metadata coherente ante fallos parciales de PDF
 
 - Estado: nuevo
 - Objetivo: asegurar que un fallo de PDF nunca degrade la etapa de reporting ni destruya el artifact Markdown.
-- Contexto técnico: el roadmap actualizado exige que la trazabilidad se preserve incluso cuando la etapa final falle.
+- Contexto técnico: el roadmap actualizado exige que la trazabilidad se preserve incluso cuando la etapa final falle, y Sprint 06 convierte esa regla en semántica observable de reuse, exit code y metadata.
 - Alcance:
   - marcar `pdf` como `failed` sin alterar `report` completado;
   - preservar `report.md`, `prompt_used.md` y `llm_response_raw.txt`;
-  - registrar error resumido y prerequisitos satisfechos.
+  - registrar error resumido y prerequisitos satisfechos;
+  - permitir reanudación segura desde `pdf=failed` o `report.pdf` ausente sin rerun LLM;
+  - hacer que el comando salga non-zero cuando el objetivo era PDF y la etapa falla.
 - No se tocará:
   - retries automáticos de PDF;
-  - recuperación automática del entorno TeX.
+  - recuperación automática del entorno TeX;
+  - artifacts nuevos de debugging como `pdf_error.txt`.
 - Cambios esperados:
   - semántica clara de fallo parcial;
-  - mejor observabilidad de `pdf`.
-- Gherkin:
+  - mejor observabilidad de `pdf`;
+  - criterio reutilizable de `report -> pdf` sin volver a llamar al proveedor LLM.
+- Gherkin ampliado:
 
 ```gherkin
 Scenario: Fallar PDF preservando Markdown
@@ -1343,17 +1493,66 @@ Scenario: Fallar PDF preservando Markdown
   Then "report.md" permanece intacto
   And la etapa "report" sigue completada
   And la etapa "pdf" queda en estado "failed"
+
+Scenario: Reintentar PDF usando report reutilizable
+  Given un artifact root con "report.md" válido
+  And la etapa "pdf" quedó "failed" o falta "report.pdf"
+  When reejecuto reporting con reanudación
+  Then no se vuelve a invocar al LLM
+  And solo se reintenta la etapa "pdf"
+
+Scenario: Salir con error cuando el objetivo final era PDF
+  Given un artifact root con "report.md" válido
+  And la etapa PDF falla
+  When ejecuto "media-report process archivo.mp4" o "media-report report artefactos"
+  Then el comando termina con exit code distinto de cero
+  And la metadata conserva "report" como completada
+
+Scenario: Regenerar report y pdf con overwrite explícito
+  Given un artifact root con "report.md" y "report.pdf" previos
+  When ejecuto reporting con "--overwrite"
+  Then la etapa "report" se vuelve a planificar
+  And la etapa "pdf" también se invalida y se regenera
 ```
 
 - Pruebas:
+  - unitarias de metadata y stage transitions para `pdf=failed` con `report=completed`;
+  - unitarias de reuse `report -> pdf` sin invocar al LLM;
   - integración de fallo parcial preservando artifacts;
-  - validación de metadata y `pipeline.log`.
-- Checklist:
+  - integración CLI validando exit code non-zero, metadata y `pipeline.log`.
+- Desglose de tareas:
+  - Arquitectura:
+    - fijar la semántica de failure downstream sin degradar la etapa upstream;
+    - reutilizar los validadores y planners existentes para distinguir `report` válido de `pdf` pendiente o fallido.
+  - Negocio/valor:
+    - evitar que un fallo de toolchain PDF obligue a repetir generación LLM;
+    - mantener trazabilidad auditable aun cuando el entregable final no se complete.
+  - Funcional:
+    - preservar `report.md`, `prompt_used.md` y `llm_response_raw.txt`;
+    - marcar `pdf` como `failed`;
+    - permitir reintento de solo `pdf`;
+    - devolver error de proceso cuando la meta era producir PDF.
+  - No funcional:
+    - no crear artifacts nuevos de debugging;
+    - mantener logs y metadata suficientemente explicativos;
+    - asegurar que no se pierda la reutilización segura de Markdown.
+  - Pruebas:
+    - cubrir fallo de `pandoc`, fallo de engine, reintento de PDF y overwrite total de reporting;
+    - validar que el LLM no se ejecuta en el reintento de solo PDF.
+  - Documentación/aceptación:
+    - dejar la semántica de exit code y reuse escrita en backlog;
+    - enlazar esta semántica con el criterio de salida del sprint.
+- Checklist de implementación:
   - [ ] El fallo de `pdf` no degrada `report`.
-  - [ ] `report.md` permanece reutilizable.
-  - [ ] El error resumido queda persistido.
-- Preguntas de cierre:
+  - [ ] `report.md` permanece reutilizable cuando `pdf` falla o falta.
+  - [ ] El error resumido queda persistido en metadata y `pipeline.log`.
+  - [ ] La siguiente ejecución puede reusar `report` y reintentar solo `pdf`.
+  - [ ] El comando sale non-zero cuando el objetivo final era PDF y la etapa falla.
+  - [ ] `--overwrite` vuelve a invalidar tanto `report` como `pdf` cuando corresponde.
+- Preguntas de definición y cierre:
   - [ ] ¿La reanudación desde `pdf` fallido es clara y segura?
+  - [ ] ¿El usuario puede distinguir entre fallo parcial recuperable y rerun completo?
+  - [ ] ¿La metadata evita falsos `reused` o `completed` de `pdf`?
 
 ## Epic 07: Fase 7
 
