@@ -1162,7 +1162,8 @@ Scenario: Rechazar artifact root sin prerequisitos
 
 #### WI-05-04 - Cerrar semántica de completion de `report`
 
-- Estado: nuevo
+- Estado: hecho
+- Cerrado en: 2026-06-13T00:24:00-05:00
 - Objetivo: fijar cuándo la etapa `report` puede considerarse `completed` y qué artifacts son obligatorios para reuso seguro.
 - Contexto técnico: hoy ya existe render de prompt, pero falta cerrar la semántica final de completion y reutilización de reporting.
 - Alcance:
@@ -1195,16 +1196,23 @@ Scenario: Invalidar reporting incompleto
 ```
 
 - Pruebas:
-  - unitarias del validador;
-  - integración de reuse completo e incompleto;
-  - casos de `--overwrite` sobre artifacts parciales.
+  - unitarias del validador para artifacts faltantes e inconsistentes;
+  - unitarias del caso de uso para reuse completo sin provider y regeneración cuando `report` quedó incompleto;
+  - integración CLI de reuse completo e incompleto para `report`.
 - Checklist:
-  - [ ] Los tres artifacts obligatorios quedan definidos.
-  - [ ] La etapa `report` no se reutiliza si falta alguno.
-  - [ ] `process --only-report` y `report` comparten la misma semántica.
+  - [x] Los tres artifacts obligatorios quedan definidos.
+  - [x] La etapa `report` no se reutiliza si falta alguno.
+  - [x] `process --only-report` y `report` comparten la misma semántica.
 - Preguntas de cierre:
-  - [ ] ¿La metadata no marca falsos `completed`?
-  - [ ] ¿El usuario entiende cuándo reusa y cuándo regenera?
+  - [x] ¿La metadata no marca falsos `completed`?
+  - [x] ¿El usuario entiende cuándo reusa y cuándo regenera?
+
+- Resultado implementado:
+  - `ArtifactRootValidator` ahora define explícitamente la semántica de un `report` reutilizable: `prompt_used.md` no vacío, `llm_response_raw.txt` no vacío y `report.md` coherente con la respuesta normalizada del LLM;
+  - cuando metadata afirmaba falsamente que `report` estaba `completed`, `PromptRunPreparer` deja de abortar el flujo y degrada `report` y `pdf` a `planned`, permitiendo regeneración automática sin requerir `--overwrite`;
+  - la razón de regeneración se vuelve visible en la salida del pipeline porque la decisión de etapa `report` pasa a explicar que los artifacts previos estaban incompletos o inconsistentes;
+  - `--overwrite` de reporting ahora invalida también el estado downstream de `pdf`, evitando falsos `reused` o `completed` cuando el Markdown fuente fue regenerado;
+  - la cobertura se amplió con pruebas unitarias del validador, reuse exitoso sin invocar el provider, regeneración tras artifacts incompletos y escenarios CLI donde `report` se reutiliza o se reconstruye según corresponda.
 
 ## Epic 06: Fase 6
 
