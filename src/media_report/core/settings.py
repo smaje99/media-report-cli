@@ -9,6 +9,8 @@ import tomli_w
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from media_report.core.redaction import redact_secret
+
 
 def default_config_path() -> Path:
   xdg_home = os.environ.get("XDG_CONFIG_HOME")
@@ -35,7 +37,7 @@ class AppSettings(BaseSettings):
       "config_path": str(self.config_path),
       "llm_provider": self.llm_provider,
       "llm_model": self.llm_model,
-      "openai_api_key": _redact(self.openai_api_key),
+      "openai_api_key": redact_secret(self.openai_api_key),
       "openai_base_url": self.openai_base_url,
       "ollama_base_url": self.ollama_base_url,
       "whisper_model": self.whisper_model,
@@ -56,16 +58,6 @@ ENV_FIELD_MAP = {
   "MEDIA_REPORT_OUTPUT_FORMAT": "output_format",
   "MEDIA_REPORT_LOG_LEVEL": "log_level",
 }
-
-
-def _redact(value: str | None) -> str:
-  if not value:
-    return "<unset>"
-  if len(value) <= 6:
-    return "***"
-  return f"{value[:2]}***{value[-2:]}"
-
-
 def redact_settings(settings: AppSettings) -> dict[str, str]:
   return settings.to_display_dict()
 

@@ -127,3 +127,19 @@ class PromptRenderOutputError(MediaReportError):
 
 class PromptRenderPersistenceError(MediaReportError):
   """Raised when prompt rendering artifacts cannot be persisted safely."""
+
+
+class LLMProviderConfigurationError(MediaReportError):
+  """Raised when an LLM provider cannot be configured from the effective settings."""
+
+
+class LLMProviderExecutionError(MediaReportError):
+  """Raised when an LLM provider fails while generating a report."""
+
+
+class LLMProviderOutputError(MediaReportError):
+  """Raised when an LLM provider returns an unusable response."""
+
+
+class ReportArtifactPersistenceError(MediaReportError):
+  """Raised when report artifacts cannot be persisted safely."""

@@ -42,3 +42,29 @@ class PreparedPromptRun(BaseModel):
   artifacts: ArtifactPlan
   metadata: PipelineMetadata
   stage_decisions: tuple[StageDecision, ...]
+
+
+class GenerateReportRequest(BaseModel):
+  model_config = ConfigDict(frozen=True, extra="forbid")
+
+  input_path: Path
+  template_name: str | None = None
+  llm_provider: str | None = None
+  llm_model: str | None = None
+  overwrite: bool = False
+
+
+class GenerateReportResult(BaseModel):
+  model_config = ConfigDict(frozen=True, extra="forbid")
+
+  source: MediaSource
+  artifacts: ArtifactPlan
+  stage_decisions: tuple[StageDecision, ...]
+  final_metadata: PipelineMetadata
+  prompt_path: Path
+  response_path: Path
+  report_path: Path
+  rendered_prompt: str
+  llm_response: str
+  report_text: str
+  remote_provider_selected: bool

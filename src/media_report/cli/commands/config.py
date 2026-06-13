@@ -7,7 +7,12 @@ import typer
 from rich.pretty import Pretty
 
 from media_report.core.console import console
-from media_report.core.settings import default_config_data, load_settings, write_default_config
+from media_report.core.settings import (
+  default_config_data,
+  load_settings,
+  redact_settings,
+  write_default_config,
+)
 
 config_app = typer.Typer(help="Manage configuration.")
 
@@ -36,7 +41,7 @@ def config_init(
 def config_show() -> None:
   """Print the effective configuration with secrets redacted."""
   settings = load_settings()
-  console.print(Pretty(settings.to_display_dict()))
+  console.print(Pretty(redact_settings(settings)))
   if not settings.config_path.exists():
     console.print(
       "[yellow]Note:[/yellow] no config file exists yet; showing defaults and env overrides."

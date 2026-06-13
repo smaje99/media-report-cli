@@ -20,6 +20,7 @@ from media_report.infrastructure.filesystem.metadata_repository import (
   JsonPipelineMetadataRepository,
 )
 from media_report.infrastructure.filesystem.scanner import FileSystemMediaScanner
+from media_report.infrastructure.llm import LLMCapability
 from media_report.infrastructure.transcription import FasterWhisperProvider, TranscriptionCapability
 from media_report.infrastructure.transcription.capabilities import TRANSCRIPTION_INSTALL_HINT
 
@@ -285,6 +286,15 @@ def test_doctor_reports_dependencies(tmp_path: Path, monkeypatch) -> None:
       install_hint=TRANSCRIPTION_HINT,
     ),
   )
+  monkeypatch.setattr(
+    "media_report.cli.commands.doctor.get_llm_capability",
+    lambda _settings: LLMCapability(
+      provider="ollama",
+      available=True,
+      detail="Configured for local Ollama at http://localhost:11434/v1.",
+      is_remote=False,
+    ),
+  )
 
   result = runner.invoke(app, ["doctor"])
 
@@ -295,6 +305,8 @@ def test_doctor_reports_dependencies(tmp_path: Path, monkeypatch) -> None:
   assert "faster-whisper" in result.stdout
   assert "media-report-cli[transcription]" in result.stdout
   assert "extra transcription" in result.stdout
+  assert "llm" in result.stdout
+  assert "ollama" in result.stdout
 
 
 def test_doctor_reports_transcription_available(tmp_path: Path, monkeypatch) -> None:
@@ -307,6 +319,16 @@ def test_doctor_reports_transcription_available(tmp_path: Path, monkeypatch) -> 
       detail="Optional dependency is installed.",
     ),
   )
+  monkeypatch.setattr(
+    "media_report.cli.commands.doctor.get_llm_capability",
+    lambda _settings: LLMCapability(
+      provider="openai-compatible",
+      available=True,
+      detail="Remote provider configured.",
+      is_remote=True,
+      warning="Requests may leave the local machine.",
+    ),
+  )
 
   result = runner.invoke(app, ["doctor"])
 
@@ -315,6 +337,7 @@ def test_doctor_reports_transcription_available(tmp_path: Path, monkeypatch) -> 
   assert "faster-whisper" in result.stdout
   assert "Optional dependency is" in result.stdout
   assert "installed." in result.stdout
+  assert "openai-compatible" in result.stdout
 
 
 def test_process_creates_artifact_directory_and_metadata(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from media_report.application.process_media.service import ProcessMediaService
+from media_report.application.reporting import PromptRenderService, ReportGenerationService
 from media_report.application.transcribe.service import TranscribeService
 from media_report.core.settings import AppSettings
 from media_report.infrastructure.ffmpeg.service import FFmpegService
@@ -11,6 +12,7 @@ from media_report.infrastructure.filesystem.scanner import FileSystemMediaScanne
 from media_report.infrastructure.filesystem.transcription_repository import (
   JsonTranscriptionArtifactRepository,
 )
+from media_report.infrastructure.llm import build_llm_provider_resolver
 from media_report.infrastructure.resources.templates import PackagePromptTemplateRepository
 from media_report.infrastructure.transcription import FasterWhisperProvider
 
@@ -44,4 +46,21 @@ def build_process_service(settings: AppSettings) -> ProcessMediaService:
     templates=PackagePromptTemplateRepository(),
     metadata_repository=metadata_repository,
     transcribe_service=transcribe_service,
+  )
+
+
+def build_report_generation_service(settings: AppSettings) -> ReportGenerationService:
+  scanner = FileSystemMediaScanner()
+  metadata_repository = JsonPipelineMetadataRepository()
+  template_repository = PackagePromptTemplateRepository()
+  prompt_renderer = PromptRenderService(
+    scanner=scanner,
+    metadata_repository=metadata_repository,
+    template_repository=template_repository,
+  )
+  return ReportGenerationService(
+    prompt_renderer=prompt_renderer,
+    metadata_repository=metadata_repository,
+    provider_resolver=build_llm_provider_resolver(settings),
+    secret_values=(settings.openai_api_key,) if settings.openai_api_key else (),
   )
