@@ -10,7 +10,7 @@ from media_report.application.reporting import (
 from media_report.domain.artifacts.entities import PipelineStage
 from media_report.domain.artifacts.service import ArtifactPlanner
 from media_report.domain.media.entities import MediaSource
-from media_report.domain.reporting.ports import LLMProvider
+from media_report.domain.reporting.ports import DocumentRenderer, LLMProvider
 from media_report.domain.transcription.entities import (
   TranscriptionResult,
   TranscriptionSegment,
@@ -33,6 +33,15 @@ class FakeLLMProvider(LLMProvider):
   def generate(self, prompt: str, *, model: str) -> str:
     self.calls.append((prompt, model))
     return self.response
+
+
+class FakeDocumentRenderer(DocumentRenderer):
+  def __init__(self) -> None:
+    self.calls: list[tuple[Path, Path]] = []
+
+  def render(self, markdown_path: Path, pdf_path: Path) -> None:
+    self.calls.append((markdown_path, pdf_path))
+    pdf_path.write_text("%PDF-1.4", encoding="utf-8")
 
 
 def build_transcription_result() -> TranscriptionResult:
@@ -88,6 +97,7 @@ def test_generate_report_uses_packaged_template_and_persists_markdown(tmp_path: 
   media_path.write_text("audio", encoding="utf-8")
   artifact_root = write_transcribed_artifact_root(media_path)
   provider = FakeLLMProvider("# Technical Report\n\n## Summary\n\nAll good.")
+  renderer = FakeDocumentRenderer()
   metadata_repository = JsonPipelineMetadataRepository()
   prompt_renderer = PromptRenderService(
     scanner=FileSystemMediaScanner(),
@@ -98,6 +108,7 @@ def test_generate_report_uses_packaged_template_and_persists_markdown(tmp_path: 
     prompt_renderer=prompt_renderer,
     metadata_repository=metadata_repository,
     provider_resolver=lambda _provider_name: provider,
+    document_renderer=renderer,
   )
 
   result = service.generate_report(GenerateReportRequest(input_path=artifact_root))
@@ -115,3 +126,5 @@ def test_generate_report_uses_packaged_template_and_persists_markdown(tmp_path: 
     result.report_path.read_text(encoding="utf-8")
     == "# Technical Report\n\n## Summary\n\nAll good.\n"
   )
+  assert renderer.calls == [(artifact_root / "report.md", artifact_root / "report.pdf")]
+  assert (artifact_root / "report.pdf").read_text(encoding="utf-8") == "%PDF-1.4"

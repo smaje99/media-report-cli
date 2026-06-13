@@ -96,6 +96,9 @@ class StubReportService:
           PipelineStage.REPORT: metadata.stages[PipelineStage.REPORT].model_copy(
             update={"status": PipelineStageStatus.COMPLETED}
           ),
+          PipelineStage.PDF: metadata.stages[PipelineStage.PDF].model_copy(
+            update={"status": PipelineStageStatus.COMPLETED}
+          ),
         },
       }
     )
@@ -103,6 +106,7 @@ class StubReportService:
     artifacts.prompt_used.write_text("prompt", encoding="utf-8")
     artifacts.llm_response_raw.write_text("# Report", encoding="utf-8")
     artifacts.report_markdown.write_text("# Report\n", encoding="utf-8")
+    artifacts.report_pdf.write_text("%PDF-1.4", encoding="utf-8")
     return GenerateReportResult(
       source=MediaSource(path=source_path, kind=source_kind),
       artifacts=artifacts,
@@ -235,6 +239,9 @@ def test_process_only_report_does_not_delegate_to_transcribe_service(tmp_path: P
     PipelineStageStatus.COMPLETED
   )
   assert plan.items[0].final_metadata.stages[PipelineStage.REPORT].status == (
+    PipelineStageStatus.COMPLETED
+  )
+  assert plan.items[0].final_metadata.stages[PipelineStage.PDF].status == (
     PipelineStageStatus.COMPLETED
   )
 

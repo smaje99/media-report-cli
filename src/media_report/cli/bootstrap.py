@@ -4,6 +4,7 @@ from media_report.application.process_media.service import ProcessMediaService
 from media_report.application.reporting import PromptRenderService, ReportGenerationService
 from media_report.application.transcribe.service import TranscribeService
 from media_report.core.settings import AppSettings
+from media_report.infrastructure.document.pandoc_renderer import PandocDocumentRenderer
 from media_report.infrastructure.ffmpeg.service import FFmpegService
 from media_report.infrastructure.filesystem.metadata_repository import (
   JsonPipelineMetadataRepository,
@@ -63,5 +64,6 @@ def build_report_generation_service(settings: AppSettings) -> ReportGenerationSe
     prompt_renderer=prompt_renderer,
     metadata_repository=metadata_repository,
     provider_resolver=build_llm_provider_resolver(settings),
+    document_renderer=PandocDocumentRenderer(),
     secret_values=(settings.openai_api_key,) if settings.openai_api_key else (),
   )

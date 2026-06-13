@@ -27,6 +27,7 @@ def test_pandoc_command_construction() -> None:
     Path("report.md"),
     Path("report.pdf"),
     Path("default.tex"),
+    engine="xelatex",
   )
 
   assert command[0] == "pandoc"

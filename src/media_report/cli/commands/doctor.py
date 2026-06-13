@@ -9,6 +9,7 @@ from rich.table import Table
 from media_report.core.console import console
 from media_report.core.resources import list_pdf_templates, list_prompt_templates
 from media_report.core.settings import load_settings, redact_settings
+from media_report.infrastructure.document.capabilities import get_pdf_capability
 from media_report.infrastructure.llm import get_llm_capability
 from media_report.infrastructure.transcription import get_transcription_capability
 
@@ -60,6 +61,15 @@ def doctor_command() -> None:
   if llm.warning:
     llm_details = f"{llm_details} {llm.warning}"
   table.add_row("llm", llm_status, escape(f"{llm.provider}: {llm_details}"))
+
+  pdf = get_pdf_capability()
+  pdf_status = "ok" if pdf.available else "missing"
+  if pdf.warning:
+    pdf_status = "warning"
+  pdf_details = pdf.detail
+  if pdf.warning:
+    pdf_details = f"{pdf_details} {pdf.warning}"
+  table.add_row("pdf", pdf_status, escape(pdf_details))
 
   table.add_row("prompt templates", "ok", ", ".join(list_prompt_templates()))
   table.add_row("pdf templates", "ok", ", ".join(list_pdf_templates()))

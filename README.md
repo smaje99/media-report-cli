@@ -72,8 +72,8 @@ Version `0.1.0` treats the current bootstrap CLI surface as stable:
 | --- | --- | --- |
 | Active now | `--recursive`, `--resume`, `--template` | Affect discovery, artifact reuse, and execution through transcription today |
 | Deprecated compatibility | `--overwrite` | Deprecated alias for `--resume` during Sprint 2; destructive overwrite is intentionally not exposed yet |
-| Active for planning | `--provider`, `--model`, `--output-format` | Affect planned workflow metadata and remote-provider warning today |
-| Planning selectors | `--only-transcribe`, `--only-report` | `--only-transcribe` executes audio prep plus transcription; `--only-report` requires reusable transcription artifacts and `--resume` |
+| Active for planning | `--provider`, `--model`, `--output-format` | Affect planned workflow metadata during default `process`; become effective in reporting flows |
+| Planning selectors | `--only-transcribe`, `--only-report` | `--only-transcribe` executes audio prep plus transcription; `--only-report` requires reusable transcription artifacts, `--resume`, and attempts report plus PDF |
 | Metadata and transcription | `--language` | Passed to transcription and persisted in pipeline metadata |
 
 `media-report transcribe` accepts a single media file or a reusable artifact directory and exposes:
@@ -127,19 +127,20 @@ media-report config init
 - Exposes `report` as a reusable single-input stage command over completed transcription artifacts
 - Persists `transcript_raw.txt` and `transcript_segments.json`
 - Persists `prompt_used.md`, `llm_response_raw.txt`, and `report.md`
+- Persists `report.pdf` for reporting flows when Pandoc and a supported TeX engine are available
 - Writes and updates `metadata.json` and `pipeline.log`
 - Reuses valid sibling artifact directories when invoked with `--resume`
 - Validates existing metadata strictly before executing a resumed run
 - Prefers GPU-backed transcription when available and falls back to CPU with traceability
-- Prints per-stage decisions and final transcription-stage status
+- Prints per-stage decisions and final stage status for the active flow
 - Loads packaged prompt and PDF templates from installed package resources
 - Checks external tooling availability with `doctor`
 - Manages config at `~/.config/media-report/config.toml`
 
 Audio preparation through FFmpeg, local transcription through `faster-whisper`, and LLM-backed
-Markdown report generation are wired into the current CLI. PDF rendering remains planned for a
-later phase, and default `process` still stops operationally at transcription unless
-`--only-report` is used with reusable artifacts.
+Markdown and PDF report generation are wired into the current reporting flows. Default `process`
+still stops operationally at transcription in `0.1.0`; PDF execution is currently reached through
+`report` and `process --resume --only-report` over reusable artifacts.
 
 ## External Dependencies
 

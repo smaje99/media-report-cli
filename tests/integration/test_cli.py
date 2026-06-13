@@ -7,6 +7,7 @@ from media_report.cli.app import app
 from media_report.core.errors import (
   MediaProcessingExecutionError,
   OptionalDependencyMissingError,
+  PDFRenderingExecutionError,
 )
 from media_report.domain.artifacts.entities import PipelineStage, PipelineStageStatus
 from media_report.domain.artifacts.service import ArtifactPlanner
@@ -15,6 +16,8 @@ from media_report.domain.transcription.entities import (
   TranscriptionResult,
   TranscriptionSegment,
 )
+from media_report.infrastructure.document.capabilities import PDFCapability
+from media_report.infrastructure.document.pandoc_renderer import PandocDocumentRenderer
 from media_report.infrastructure.ffmpeg.service import FFmpegService
 from media_report.infrastructure.filesystem.metadata_repository import (
   JsonPipelineMetadataRepository,
@@ -186,6 +189,11 @@ def stub_reporting(
 
   monkeypatch.setattr(OllamaProvider, "generate", fake_ollama_generate)
   monkeypatch.setattr(OpenAICompatibleProvider, "generate", fake_openai_generate)
+  monkeypatch.setattr(
+    PandocDocumentRenderer,
+    "render",
+    lambda self, markdown_path, pdf_path: pdf_path.write_text("%PDF-1.4", encoding="utf-8"),
+  )
 
 
 def test_root_help_exposes_bootstrap_contract() -> None:
@@ -324,6 +332,15 @@ def test_doctor_reports_dependencies(tmp_path: Path, monkeypatch) -> None:
       is_remote=False,
     ),
   )
+  monkeypatch.setattr(
+    "media_report.cli.commands.doctor.get_pdf_capability",
+    lambda: PDFCapability(
+      available=True,
+      detail="pandoc with xelatex using default.tex",
+      engine="xelatex",
+      template="default.tex",
+    ),
+  )
 
   result = runner.invoke(app, ["doctor"])
 
@@ -336,6 +353,8 @@ def test_doctor_reports_dependencies(tmp_path: Path, monkeypatch) -> None:
   assert "extra transcription" in result.stdout
   assert "llm" in result.stdout
   assert "ollama" in result.stdout
+  assert "pdf" in result.stdout
+  assert "xelatex" in result.stdout
 
 
 def test_doctor_reports_transcription_available(tmp_path: Path, monkeypatch) -> None:
@@ -358,6 +377,16 @@ def test_doctor_reports_transcription_available(tmp_path: Path, monkeypatch) -> 
       warning="Requests may leave the local machine.",
     ),
   )
+  monkeypatch.setattr(
+    "media_report.cli.commands.doctor.get_pdf_capability",
+    lambda: PDFCapability(
+      available=True,
+      detail="pandoc with lualatex using default.tex",
+      engine="lualatex",
+      template="default.tex",
+      warning="xelatex not found; using lualatex fallback.",
+    ),
+  )
 
   result = runner.invoke(app, ["doctor"])
 
@@ -367,6 +396,7 @@ def test_doctor_reports_transcription_available(tmp_path: Path, monkeypatch) -> 
   assert "Optional dependency is" in result.stdout
   assert "installed." in result.stdout
   assert "openai-compatible" in result.stdout
+  assert "lualatex" in result.stdout
 
 
 def test_process_creates_artifact_directory_and_metadata(
@@ -528,6 +558,7 @@ def test_process_resume_reuses_completed_transcription_artifacts(
   assert "pdf: planned" in result.stdout
   metadata = json.loads((artifact_root / "metadata.json").read_text(encoding="utf-8"))
   assert metadata["workflow"]["selected_stages"] == ["report", "pdf"]
+  assert metadata["stages"]["pdf"]["status"] == "completed"
   assert_stdout_contains_all(
     "extract_audio status: completed",
     result,
@@ -547,8 +578,9 @@ def test_report_command_generates_markdown_from_artifact_root(
 
   assert result.exit_code == 0
   assert (artifact_root / "report.md").read_text(encoding="utf-8") == "# Report\n\n- item\n"
+  assert (artifact_root / "report.pdf").read_text(encoding="utf-8") == "%PDF-1.4"
   assert "report status: completed" in result.stdout
-  assert "pdf status: planned" in result.stdout
+  assert "pdf status: completed" in result.stdout
 
 
 def test_report_command_resolves_media_file_to_artifact_root(
@@ -665,8 +697,9 @@ def test_process_only_report_executes_reporting_from_existing_artifacts(
 
   assert result.exit_code == 0
   assert (artifact_root / "report.md").read_text(encoding="utf-8") == "# Report\n\n- item\n"
+  assert (artifact_root / "report.pdf").read_text(encoding="utf-8") == "%PDF-1.4"
   assert "report status: completed" in result.stdout
-  assert "pdf status: planned" in result.stdout
+  assert "pdf status: completed" in result.stdout
 
 
 def test_report_command_warns_for_remote_provider(
@@ -740,7 +773,32 @@ def test_report_command_regenerates_when_completed_report_is_incomplete(
   assert "rerunning report generation" in result.stdout
   assert (artifact_root / "report.md").read_text(encoding="utf-8") == "# Report\n\n- repaired\n"
   assert metadata["stages"]["report"]["status"] == "completed"
-  assert metadata["stages"]["pdf"]["status"] == "planned"
+  assert metadata["stages"]["pdf"]["status"] == "completed"
+
+
+def test_report_command_fails_when_pdf_rendering_fails_but_preserves_markdown(
+  tmp_path: Path, monkeypatch, single_media_path: Path
+) -> None:
+  monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+  artifact_root = write_resume_ready_metadata(single_media_path)
+  stub_reporting(monkeypatch)
+
+  def fail_render(self, markdown_path: Path, pdf_path: Path) -> None:
+    raise PDFRenderingExecutionError(
+      engine="xelatex",
+      exit_code=17,
+      stderr_summary="pandoc failed unexpectedly",
+    )
+
+  monkeypatch.setattr(PandocDocumentRenderer, "render", fail_render)
+
+  result = runner.invoke(app, ["report", str(artifact_root)])
+  metadata = json.loads((artifact_root / "metadata.json").read_text(encoding="utf-8"))
+
+  assert result.exit_code == 1
+  assert (artifact_root / "report.md").read_text(encoding="utf-8") == "# Report\n\n- item\n"
+  assert metadata["stages"]["report"]["status"] == "completed"
+  assert metadata["stages"]["pdf"]["status"] == "failed"
 
 
 def test_process_directory_without_supported_media_exits_with_code_one(

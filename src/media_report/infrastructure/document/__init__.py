@@ -1,1 +1,1 @@
-"""Document rendering scaffolding."""
+"""Document rendering adapters and capability probes."""

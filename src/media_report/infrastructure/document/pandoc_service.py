@@ -5,11 +5,17 @@ from pathlib import Path
 
 class PandocService:
   @staticmethod
-  def build_command(markdown_path: Path, pdf_path: Path, template_path: Path) -> list[str]:
+  def build_command(
+    markdown_path: Path,
+    pdf_path: Path,
+    template_path: Path,
+    *,
+    engine: str,
+  ) -> list[str]:
     return [
       "pandoc",
       str(markdown_path),
-      "--pdf-engine=xelatex",
+      f"--pdf-engine={engine}",
       f"--template={template_path}",
       "-o",
       str(pdf_path),

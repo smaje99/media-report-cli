@@ -70,6 +70,8 @@ class PromptRunPreparer:
         f"expected '{artifacts.root_dir}', found '{request.input_path}'."
       )
 
+    report_recovery_reason: str | None = None
+    pdf_recovery_reason: str | None = None
     try:
       self._artifact_validator.validate(
         source=source,
@@ -82,10 +84,16 @@ class PromptRunPreparer:
         artifacts=artifacts,
         error=exc,
       )
-      if report_recovery_reason is None:
+      metadata, pdf_recovery_reason = self._recover_invalid_pdf_completion(
+        metadata=metadata,
+        artifacts=artifacts,
+        error=exc,
+      )
+      recovery_reason = report_recovery_reason or pdf_recovery_reason
+      if recovery_reason is None:
         raise PromptRenderPrerequisiteError(str(exc)) from exc
     else:
-      report_recovery_reason = None
+      recovery_reason = None
 
     effective_template = request.template_name or metadata.workflow.template_name
     metadata = self._artifact_planner.update_workflow(
@@ -113,11 +121,15 @@ class PromptRunPreparer:
     except StagePrerequisiteError as exc:
       raise PromptRenderPrerequisiteError(str(exc)) from exc
 
-    if report_recovery_reason is not None:
+    if recovery_reason is not None:
       stage_decisions = _replace_stage_decision_reason(
         stage_decisions=stage_decisions,
-        stage=PipelineStage.REPORT,
-        reason=report_recovery_reason,
+        stage=(
+          PipelineStage.REPORT
+          if report_recovery_reason is not None
+          else PipelineStage.PDF
+        ),
+        reason=recovery_reason,
       )
 
     self._metadata_repository.write(metadata)
@@ -127,10 +139,10 @@ class PromptRunPreparer:
         artifacts.root_dir,
         "report artifacts reset for regeneration; pdf stage marked planned.",
       )
-    elif report_recovery_reason is not None:
+    elif recovery_reason is not None:
       self._artifact_planner.append_log_event(
         artifacts.root_dir,
-        report_recovery_reason,
+        recovery_reason,
       )
     return PreparedPromptRun(
       source=source,
@@ -168,6 +180,32 @@ class PromptRunPreparer:
       repaired_metadata,
       "Existing report artifacts were incomplete or inconsistent; rerunning report generation.",
     )
+
+  def _recover_invalid_pdf_completion(
+    self,
+    *,
+    metadata: PipelineMetadata,
+    artifacts: ArtifactPlan,
+    error: ArtifactMetadataError,
+  ) -> tuple[PipelineMetadata, str | None]:
+    pdf_status = metadata.stages[PipelineStage.PDF].status
+    if pdf_status != PipelineStageStatus.COMPLETED:
+      return metadata, None
+    if "Stage 'pdf'" not in str(error):
+      return metadata, None
+    if self._artifact_validator.missing_outputs_for_stage(
+      artifact_plan=artifacts,
+      stage=PipelineStage.PDF,
+    ):
+      repaired_metadata = self._artifact_planner.reset_stages_to_planned(
+        metadata,
+        stages=(PipelineStage.PDF,),
+      )
+      return (
+        repaired_metadata,
+        "Existing pdf artifact was missing; rerunning pdf generation.",
+      )
+    return metadata, None
 
 
 def _replace_stage_decision_reason(

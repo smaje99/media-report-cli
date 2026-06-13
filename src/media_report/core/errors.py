@@ -143,3 +143,24 @@ class LLMProviderOutputError(MediaReportError):
 
 class ReportArtifactPersistenceError(MediaReportError):
   """Raised when report artifacts cannot be persisted safely."""
+
+
+class PDFRenderingConfigurationError(MediaReportError):
+  """Raised when PDF rendering prerequisites are missing or unusable."""
+
+
+class PDFRenderingExecutionError(MediaReportError):
+  """Raised when Pandoc or LaTeX fails while rendering the PDF."""
+
+  def __init__(self, *, engine: str, exit_code: int, stderr_summary: str | None = None) -> None:
+    message = f"PDF rendering failed with engine '{engine}' and exit code {exit_code}."
+    if stderr_summary:
+      message = f"{message} {stderr_summary}"
+    super().__init__(message)
+    self.engine = engine
+    self.exit_code = exit_code
+    self.stderr_summary = stderr_summary
+
+
+class PDFRenderingOutputError(MediaReportError):
+  """Raised when a PDF render completes without producing the expected file."""

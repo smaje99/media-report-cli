@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from importlib.resources import files
+from importlib.resources.abc import Traversable
 
 from media_report.core.errors import TemplateNotFoundError
 
@@ -27,3 +28,10 @@ def load_prompt_template(name: str) -> str:
   if not resource.is_file():
     raise TemplateNotFoundError(f"Prompt template '{name}' was not found.")
   return resource.read_text(encoding="utf-8")
+
+
+def resolve_pdf_template_resource(name: str = "default.tex") -> Traversable:
+  resource = files("media_report.templates.pdf").joinpath(name)
+  if not resource.is_file():
+    raise TemplateNotFoundError(f"PDF template '{name}' was not found.")
+  return resource

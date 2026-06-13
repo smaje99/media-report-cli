@@ -10,11 +10,15 @@ from media_report.application.reporting import (
   PromptRenderService,
   ReportGenerationService,
 )
-from media_report.core.errors import LLMProviderExecutionError
+from media_report.core.errors import LLMProviderExecutionError, PDFRenderingExecutionError
 from media_report.domain.artifacts.entities import PipelineStage, PipelineStageStatus
 from media_report.domain.artifacts.service import ArtifactPlanner
 from media_report.domain.media.entities import MediaSource
-from media_report.domain.reporting.ports import LLMProvider, PromptTemplateRepository
+from media_report.domain.reporting.ports import (
+  DocumentRenderer,
+  LLMProvider,
+  PromptTemplateRepository,
+)
 from media_report.domain.transcription.entities import (
   TranscriptionResult,
   TranscriptionSegment,
@@ -44,6 +48,18 @@ class StubLLMProvider(LLMProvider):
     if self.error is not None:
       raise self.error
     return self.response
+
+
+class StubDocumentRenderer(DocumentRenderer):
+  def __init__(self, error: Exception | None = None) -> None:
+    self.error = error
+    self.calls: list[tuple[Path, Path]] = []
+
+  def render(self, markdown_path: Path, pdf_path: Path) -> None:
+    self.calls.append((markdown_path, pdf_path))
+    if self.error is not None:
+      raise self.error
+    pdf_path.write_text("%PDF-1.4", encoding="utf-8")
 
 
 def build_transcription_result(text: str = "hola mundo") -> TranscriptionResult:
@@ -102,6 +118,7 @@ def write_transcribed_artifact_root(media_path: Path, transcript_text: str = "ho
 def build_service(
   *,
   provider: LLMProvider,
+  renderer: DocumentRenderer | None = None,
   secret_values: tuple[str, ...] = (),
 ) -> ReportGenerationService:
   metadata_repository = JsonPipelineMetadataRepository()
@@ -114,6 +131,7 @@ def build_service(
     prompt_renderer=prompt_renderer,
     metadata_repository=metadata_repository,
     provider_resolver=lambda _provider_name: provider,
+    document_renderer=renderer or StubDocumentRenderer(),
     secret_values=secret_values,
   )
 
@@ -123,15 +141,18 @@ def test_generate_report_persists_response_and_report_markdown(tmp_path: Path) -
   media_path.write_text("audio", encoding="utf-8")
   artifact_root = write_transcribed_artifact_root(media_path)
   provider = StubLLMProvider(response="# Report\n\n- item")
+  renderer = StubDocumentRenderer()
 
-  result = build_service(provider=provider).generate_report(
+  result = build_service(provider=provider, renderer=renderer).generate_report(
     GenerateReportRequest(input_path=artifact_root)
   )
 
   assert provider.calls
+  assert renderer.calls == [(artifact_root / "report.md", artifact_root / "report.pdf")]
   assert result.response_path.read_text(encoding="utf-8") == "# Report\n\n- item"
   assert result.report_path.read_text(encoding="utf-8") == "# Report\n\n- item\n"
   assert result.final_metadata.stages[PipelineStage.REPORT].status == PipelineStageStatus.COMPLETED
+  assert result.final_metadata.stages[PipelineStage.PDF].status == PipelineStageStatus.COMPLETED
   assert result.remote_provider_selected is False
 
 
@@ -167,17 +188,20 @@ def test_generate_report_overwrite_regenerates_existing_report(tmp_path: Path) -
   artifact_root = write_transcribed_artifact_root(media_path)
   initial_provider = StubLLMProvider(response="# Initial")
   overwrite_provider = StubLLMProvider(response="# Updated")
+  initial_renderer = StubDocumentRenderer()
+  overwrite_renderer = StubDocumentRenderer()
 
-  build_service(provider=initial_provider).generate_report(
+  build_service(provider=initial_provider, renderer=initial_renderer).generate_report(
     GenerateReportRequest(input_path=artifact_root)
   )
-  result = build_service(provider=overwrite_provider).generate_report(
+  result = build_service(provider=overwrite_provider, renderer=overwrite_renderer).generate_report(
     GenerateReportRequest(input_path=artifact_root, overwrite=True)
   )
 
   assert result.response_path.read_text(encoding="utf-8") == "# Updated"
   assert result.report_path.read_text(encoding="utf-8") == "# Updated\n"
   assert overwrite_provider.calls
+  assert overwrite_renderer.calls
 
 
 def test_generate_report_updates_effective_provider_and_model(tmp_path: Path) -> None:
@@ -186,7 +210,7 @@ def test_generate_report_updates_effective_provider_and_model(tmp_path: Path) ->
   artifact_root = write_transcribed_artifact_root(media_path)
   provider = StubLLMProvider(response="# Remote")
 
-  result = build_service(provider=provider).generate_report(
+  result = build_service(provider=provider, renderer=StubDocumentRenderer()).generate_report(
     GenerateReportRequest(
       input_path=artifact_root,
       llm_provider="openai-compatible",
@@ -205,15 +229,19 @@ def test_generate_report_reuses_completed_report_without_calling_provider(tmp_pa
   media_path.write_text("audio", encoding="utf-8")
   artifact_root = write_transcribed_artifact_root(media_path)
   provider = StubLLMProvider(response="# Report\n\n- item")
-  service = build_service(provider=provider)
+  renderer = StubDocumentRenderer()
+  service = build_service(provider=provider, renderer=renderer)
 
   service.generate_report(GenerateReportRequest(input_path=artifact_root))
   provider.calls.clear()
+  renderer.calls.clear()
 
   result = service.generate_report(GenerateReportRequest(input_path=artifact_root))
 
   assert provider.calls == []
+  assert renderer.calls == []
   assert result.final_metadata.stages[PipelineStage.REPORT].status == PipelineStageStatus.COMPLETED
+  assert result.final_metadata.stages[PipelineStage.PDF].status == PipelineStageStatus.COMPLETED
   assert result.llm_response == "# Report\n\n- item"
 
 
@@ -222,7 +250,8 @@ def test_generate_report_regenerates_when_completed_report_is_incomplete(tmp_pat
   media_path.write_text("audio", encoding="utf-8")
   artifact_root = write_transcribed_artifact_root(media_path)
   provider = StubLLMProvider(response="# Report\n\n- repaired")
-  service = build_service(provider=provider)
+  renderer = StubDocumentRenderer()
+  service = build_service(provider=provider, renderer=renderer)
 
   service.generate_report(GenerateReportRequest(input_path=artifact_root))
   (artifact_root / "llm_response_raw.txt").unlink()
@@ -234,4 +263,52 @@ def test_generate_report_regenerates_when_completed_report_is_incomplete(tmp_pat
   assert len(provider.calls) == 1
   assert result.report_path.read_text(encoding="utf-8") == "# Report\n\n- repaired\n"
   assert metadata_payload["stages"]["report"]["status"] == "completed"
-  assert metadata_payload["stages"]["pdf"]["status"] == "planned"
+  assert metadata_payload["stages"]["pdf"]["status"] == "completed"
+
+
+def test_generate_report_reuses_report_and_renders_missing_pdf_without_calling_provider(
+  tmp_path: Path,
+) -> None:
+  media_path = tmp_path / "meeting.mp3"
+  media_path.write_text("audio", encoding="utf-8")
+  artifact_root = write_transcribed_artifact_root(media_path)
+  provider = StubLLMProvider(response="# Report\n\n- item")
+  renderer = StubDocumentRenderer()
+  service = build_service(provider=provider, renderer=renderer)
+
+  service.generate_report(GenerateReportRequest(input_path=artifact_root))
+  (artifact_root / "report.pdf").unlink()
+  provider.calls.clear()
+  renderer.calls.clear()
+
+  result = service.generate_report(GenerateReportRequest(input_path=artifact_root))
+
+  assert provider.calls == []
+  assert renderer.calls == [(artifact_root / "report.md", artifact_root / "report.pdf")]
+  assert result.final_metadata.stages[PipelineStage.PDF].status == PipelineStageStatus.COMPLETED
+
+
+def test_generate_report_marks_pdf_failed_without_degrading_report(tmp_path: Path) -> None:
+  media_path = tmp_path / "meeting.mp3"
+  media_path.write_text("audio", encoding="utf-8")
+  artifact_root = write_transcribed_artifact_root(media_path)
+  provider = StubLLMProvider(response="# Report\n\n- item")
+  renderer = StubDocumentRenderer(
+    error=PDFRenderingExecutionError(
+      engine="xelatex",
+      exit_code=17,
+      stderr_summary="template failed",
+    )
+  )
+
+  with pytest.raises(PDFRenderingExecutionError):
+    build_service(provider=provider, renderer=renderer).generate_report(
+      GenerateReportRequest(input_path=artifact_root)
+    )
+
+  metadata_payload = json.loads((artifact_root / "metadata.json").read_text(encoding="utf-8"))
+  assert metadata_payload["stages"]["report"]["status"] == "completed"
+  assert metadata_payload["stages"]["pdf"]["status"] == "failed"
+  assert metadata_payload["stages"]["pdf"]["error"]["code"] == "pdf_rendering_execution_failed"
+  log_text = (artifact_root / "pipeline.log").read_text(encoding="utf-8")
+  assert "pdf rendering failed" in log_text
