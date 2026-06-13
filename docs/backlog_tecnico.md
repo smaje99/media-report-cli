@@ -1107,11 +1107,12 @@ Scenario: Fallar con provider remoto sin API key
 
 #### WI-05-03 - Exponer `media-report report`
 
-- Estado: planificado
+- Estado: hecho
+- Cerrado en: 2026-06-12T23:59:59-05:00
 - Objetivo: dar una entrada pública para generar o regenerar reportes desde un artifact directory sin rehacer transcripción.
 - Contexto técnico: `process --only-report` ya existe como selector de planning, pero aún no comparte un caso de uso real con una CLI dedicada.
 - Alcance:
-  - aceptar artifact directory como input principal;
+  - aceptar artifact directory como input principal y media file como alias al artifact root hermano;
   - soportar `--template`, `--provider`, `--model`, `--overwrite`;
   - reutilizar el mismo caso de uso desde `process --only-report`.
 - No se tocará:
@@ -1138,18 +1139,26 @@ Scenario: Rechazar artifact root sin prerequisitos
 ```
 
 - Pruebas:
-  - integración CLI nominal e inválida;
-  - compatibilidad con `process --only-report --resume`;
-  - `--overwrite` limitado a artifacts de report.
+  - unit tests de resolución de input para `report`, delegación compartida desde `process` y visibilidad de estados `report`/`pdf` en la presentación Rich;
+  - integración CLI nominal e inválida para artifact root, media-file alias, warnings remotos y prerequisitos faltantes;
+  - compatibilidad con `process --only-report --resume` y `--overwrite` limitado a artifacts de report.
 - Checklist:
-  - [ ] Existe un comando público `media-report report`.
-  - [ ] El input principal es artifact directory válido.
-  - [ ] `process --only-report` reutiliza el mismo caso de uso.
-  - [ ] `report.md` se persiste y la etapa se actualiza en metadata.
+  - [x] Existe un comando público `media-report report`.
+  - [x] El input principal es artifact directory válido.
+  - [x] `process --only-report` reutiliza el mismo caso de uso.
+  - [x] `report.md` se persiste y la etapa se actualiza en metadata.
 - Preguntas de cierre:
-  - [ ] ¿`report` puede reutilizar artifacts previos de forma segura?
-  - [ ] ¿Los prerequisitos fallan antes de tocar el provider?
-  - [ ] ¿El warning remoto también aparece desde `process --only-report`?
+  - [x] ¿`report` puede reutilizar artifacts previos de forma segura?
+  - [x] ¿Los prerequisitos fallan antes de tocar el provider?
+  - [x] ¿El warning remoto también aparece desde `process --only-report`?
+
+- Resultado implementado:
+  - la CLI pública ahora expone `media-report report PATH`, aceptando tanto artifact roots reutilizables como media files que se resuelven al directorio `<stem>_media_report`, sin filtrar esa heurística hacia el port de dominio;
+  - `ProcessMediaService` dejó de usar `--only-report` como simple planning y ahora delega al mismo `ReportGenerationService` que usa el comando dedicado, preservando una única semántica de metadata, logging, provider efectivo y persistencia de `report.md`;
+  - `GenerateReportRequest` ahora transporta explícitamente las etapas de workflow seleccionadas, de modo que `report` y `process --only-report` conservan `pdf` como etapa cola planificada mientras ejecutan de forma real la etapa `report`;
+  - la presentación Rich se generalizó de forma mínima para mostrar estados `report` y `pdf` cuando el flujo lo requiere, sin duplicar tablas ni introducir una capa adicional de view models;
+  - `process --only-report --overwrite` fuerza solo la regeneración de `prompt_used.md`, `llm_response_raw.txt` y `report.md`, dejando intactos los artifacts upstream de transcripción;
+  - la cobertura quedó ampliada con pruebas unitarias de resolución de input, delegación compartida y renderizado de estados, además de integraciones CLI para `report`, warnings remotos y ejecución real de reporting desde `process --only-report`.
 
 #### WI-05-04 - Cerrar semántica de completion de `report`
 
